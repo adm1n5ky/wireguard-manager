@@ -25,13 +25,13 @@ server_create() {
     while true; do
         cidr="$(prompt_cidr)" || return 1
 
-        conflict="$(network_conflicts "$cidr")"
-        if [[ $? -eq 0 ]]; then
-            warn "Network ${cidr} overlaps with existing config: ${conflict}"
+        local conflict_result
+        conflict_result="$(network_conflicts "$cidr")" && {
+            warn "Network ${cidr} overlaps with existing config: ${conflict_result}"
             warn "Choose a different network."
-        else
-            break
-        fi
+            continue
+        }
+        break
     done
 
     # ── Step 3: Server IP (auto) ──────────────────────────────────────────────

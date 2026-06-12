@@ -3,7 +3,9 @@
 # wg-manager.sh — WireGuard Multi-Instance Manager
 # Ubuntu 24/26 LTS | v1.0
 # =============================================================================
-set -euo pipefail
+# set -euo pipefail intentionally disabled:
+# interactive scripts use non-zero returns as normal control flow
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"

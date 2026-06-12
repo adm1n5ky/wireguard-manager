@@ -6,7 +6,7 @@ CLI-инструмент для Ubuntu 24/26 LTS.
 ## Установка
 
 ```bash
-git clone <repo> /opt/wg-manager
+git clone https://github.com/adm1n5ky/wireguard-manager /opt/wg-manager
 chmod +x /opt/wg-manager/wg-manager.sh
 sudo /opt/wg-manager/wg-manager.sh
 ```
