@@ -39,22 +39,23 @@ _conf_port() {
     grep -m1 "^ListenPort" "$conf" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
 }
 
-# Strip ANSI escape sequences — returns visible length of a string
+# Count visible (non-ANSI) characters in a string
+# Usage: _visible_len "$colored_string"
 _visible_len() {
-    local s="$1"
-    # Remove all ESC[...m sequences
-    s="$(echo -e "$s" | sed 's/\x1b\[[0-9;]*m//g')"
+    local s
+    s="$(printf '%b' "$1")"
+    s="$(echo "$s" | sed 's/\x1b\[[0-9;]*m//g')"
     echo "${#s}"
 }
 
-# Pad a colored string to a given visible width (left-aligned)
-# Usage: _pad_colored "$colored_str" $width
+# Print a colored string padded to $width visible characters (left-aligned)
+# Usage: _pad_colored "$colored_string" $width
 _pad_colored() {
     local s="$1"
     local width="$2"
-    local visible
+    local visible pad
     visible="$(_visible_len "$s")"
-    local pad=$(( width - visible ))
+    pad=$(( width - visible ))
     (( pad < 0 )) && pad=0
     printf '%b%*s' "$s" "$pad" ""
 }
@@ -83,12 +84,10 @@ config_list() {
         seen["$name"]=1
         found=1
 
-        local state boot
+        local state boot state_col mgr_col
         state="$(_iface_state "$name")"
         boot="$(_iface_boot   "$name")"
 
-        # Build colored strings
-        local state_col mgr_col
         case "$state" in
             UP)      state_col="${GREEN}${state}${NC}" ;;
             DOWN)    state_col="${YELLOW}${state}${NC}" ;;
@@ -99,9 +98,9 @@ config_list() {
 
         printf "  %-16s %s %s %s %-22s %s\n" \
                "$name" \
-               "$(_pad_colored "$(echo -e "$state_col")" 9)" \
+               "$(_pad_colored "$state_col" 9)" \
                "$(_pad_colored "$boot" 5)" \
-               "$(_pad_colored "$(echo -e "$mgr_col")" 7)" \
+               "$(_pad_colored "$mgr_col" 7)" \
                "${network:--}" \
                "${port:--}"
     done
@@ -115,13 +114,12 @@ config_list() {
         [[ -n "${seen[$name]+_}" ]] && continue
         found=1
 
-        local address port state boot
+        local address port state boot state_col mgr_col
         address="$(_conf_address "$conf_file")"
         port="$(_conf_port "$conf_file")"
         state="$(_iface_state "$name")"
         boot="$(_iface_boot   "$name")"
 
-        local state_col mgr_col
         case "$state" in
             UP)      state_col="${GREEN}${state}${NC}" ;;
             DOWN)    state_col="${YELLOW}${state}${NC}" ;;
@@ -132,9 +130,9 @@ config_list() {
 
         printf "  %-16s %s %s %s %-22s %s\n" \
                "$name" \
-               "$(_pad_colored "$(echo -e "$state_col")" 9)" \
+               "$(_pad_colored "$state_col" 9)" \
                "$(_pad_colored "$boot" 5)" \
-               "$(_pad_colored "$(echo -e "$mgr_col")" 7)" \
+               "$(_pad_colored "$mgr_col" 7)" \
                "${address:--}" \
                "${port:--}"
     done
