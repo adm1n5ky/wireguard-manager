@@ -59,7 +59,7 @@ prompt_port() {
     local suggested
     suggested="$(find_free_port "$DEFAULT_PORT")" || suggested="$DEFAULT_PORT"
 
-    info "Scanning for available UDP ports..."
+    info "Scanning for available UDP ports..." >&2
 
     local port err
 

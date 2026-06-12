@@ -49,14 +49,14 @@ prompt_endpoint() {
     local detected
 
     echo
-    info "Detecting public IP address..."
+    info "Detecting public IP address..." >&2
 
     local suggested=""
     if detected="$(detect_public_ip)"; then
         suggested="$detected"
-        info "Detected public IP: ${BOLD}${detected}${NC}"
+        info "Detected public IP: ${BOLD}${detected}${NC}" >&2
     else
-        warn "Could not auto-detect public IP. Please enter manually."
+        warn "Could not auto-detect public IP. Please enter manually." >&2
     fi
 
     local endpoint err
@@ -72,7 +72,7 @@ prompt_endpoint() {
         endpoint="${endpoint// /}"
 
         if [[ -z "$endpoint" ]]; then
-            warn "Endpoint cannot be empty."
+            warn "Endpoint cannot be empty." >&2
             continue
         fi
 
@@ -81,6 +81,6 @@ prompt_endpoint() {
             echo "$endpoint"
             return 0
         fi
-        warn "$err"
+        warn "$err" >&2
     done
 }

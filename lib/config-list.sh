@@ -27,7 +27,7 @@ _iface_boot() {
     fi
 }
 
-# Extract network address from a .conf file (Address = field)
+# Extract Address from a .conf file
 _conf_address() {
     local conf="$1"
     grep -m1 "^Address" "$conf" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
@@ -39,6 +39,26 @@ _conf_port() {
     grep -m1 "^ListenPort" "$conf" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
 }
 
+# Strip ANSI escape sequences — returns visible length of a string
+_visible_len() {
+    local s="$1"
+    # Remove all ESC[...m sequences
+    s="$(echo -e "$s" | sed 's/\x1b\[[0-9;]*m//g')"
+    echo "${#s}"
+}
+
+# Pad a colored string to a given visible width (left-aligned)
+# Usage: _pad_colored "$colored_str" $width
+_pad_colored() {
+    local s="$1"
+    local width="$2"
+    local visible
+    visible="$(_visible_len "$s")"
+    local pad=$(( width - visible ))
+    (( pad < 0 )) && pad=0
+    printf '%b%*s' "$s" "$pad" ""
+}
+
 config_list() {
     echo
     echo -e "${BOLD}══════════════════════════════════════════════════════════════════${NC}"
@@ -47,8 +67,6 @@ config_list() {
     echo -e "${BOLD}══════════════════════════════════════════════════════════════════${NC}"
 
     local found=0
-
-    # Collect all known names to avoid duplicates
     declare -A seen
 
     # ── 1. Managed instances (have .env) ─────────────────────────────────────
@@ -57,7 +75,7 @@ config_list() {
 
         local name network port
         name="$(env_get    "$env_file" WG_NAME)"
-        network="$(env_get "$env_file" WG_SERVER_IP)"   # use server IP, more informative
+        network="$(env_get "$env_file" WG_SERVER_IP)"
         [[ -z "$network" ]] && network="$(env_get "$env_file" WG_NETWORK)"
         port="$(env_get    "$env_file" WG_PORT)"
 
@@ -65,22 +83,25 @@ config_list() {
         seen["$name"]=1
         found=1
 
-        local state boot state_col
+        local state boot
         state="$(_iface_state "$name")"
         boot="$(_iface_boot   "$name")"
 
+        # Build colored strings
+        local state_col mgr_col
         case "$state" in
             UP)      state_col="${GREEN}${state}${NC}" ;;
             DOWN)    state_col="${YELLOW}${state}${NC}" ;;
             STOPPED) state_col="${RED}${state}${NC}" ;;
             *)       state_col="${state}" ;;
         esac
+        mgr_col="${GREEN}yes${NC}"
 
-        printf "  %-16s %-18s %-5s %-7s %-22s %s\n" \
+        printf "  %-16s %s %s %s %-22s %s\n" \
                "$name" \
-               "$(echo -e "$state_col")" \
-               "$boot" \
-               "${GREEN}yes${NC}" \
+               "$(_pad_colored "$(echo -e "$state_col")" 9)" \
+               "$(_pad_colored "$boot" 5)" \
+               "$(_pad_colored "$(echo -e "$mgr_col")" 7)" \
                "${network:--}" \
                "${port:--}"
     done
@@ -91,29 +112,29 @@ config_list() {
 
         local name
         name="$(basename "$conf_file" .conf)"
-
-        # Skip if already listed as managed
         [[ -n "${seen[$name]+_}" ]] && continue
         found=1
 
-        local address port state boot state_col
+        local address port state boot
         address="$(_conf_address "$conf_file")"
         port="$(_conf_port "$conf_file")"
         state="$(_iface_state "$name")"
         boot="$(_iface_boot   "$name")"
 
+        local state_col mgr_col
         case "$state" in
             UP)      state_col="${GREEN}${state}${NC}" ;;
             DOWN)    state_col="${YELLOW}${state}${NC}" ;;
             STOPPED) state_col="${RED}${state}${NC}" ;;
             *)       state_col="${state}" ;;
         esac
+        mgr_col="${YELLOW}no${NC}"
 
-        printf "  %-16s %-18s %-5s %-7s %-22s %s\n" \
+        printf "  %-16s %s %s %s %-22s %s\n" \
                "$name" \
-               "$(echo -e "$state_col")" \
-               "$boot" \
-               "${YELLOW}no${NC} " \
+               "$(_pad_colored "$(echo -e "$state_col")" 9)" \
+               "$(_pad_colored "$boot" 5)" \
+               "$(_pad_colored "$(echo -e "$mgr_col")" 7)" \
                "${address:--}" \
                "${port:--}"
     done

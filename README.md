@@ -11,6 +11,10 @@ chmod +x /opt/wg-manager/wg-manager.sh
 sudo /opt/wg-manager/wg-manager.sh
 ```
 
+### Обновление
+
+cd /opt/wg-manager && git pull
+
 ## Структура файлов (на сервере)
 
 ```
@@ -43,6 +47,7 @@ wg-manager/
 ## Зависимости
 
 Автоматически устанавливаются при первом запуске:
+
 - `wireguard-tools`
 - `ipcalc`
 - `curl`
