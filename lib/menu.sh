@@ -260,12 +260,11 @@ _menu_clients_for() {
         _print_header
         echo -e "  ${BOLD}Clients — ${iface}${NC}"
         echo
-        # Future: show client list here
-        echo -e "  ${YELLOW}[client list — roadmap]${NC}"
-        echo
+        _clients_list_compact "$iface"
+
         echo "  ─────────────────────────────────"
-        echo "  1) Add client          [roadmap]"
-        echo "  2) Delete client       [roadmap]"
+        echo "  1) Add client"
+        echo "  2) Delete client"
         echo "  3) Show QR code        [roadmap]"
         echo "  4) SSH push config     [roadmap]"
         echo
@@ -276,7 +275,9 @@ _menu_clients_for() {
         echo
 
         case "$choice" in
-            1|2|3|4)
+            1) client_create_for "$iface" ;;
+            2) client_delete_for "$iface" ;;
+            3|4)
                 warn "Not implemented yet — coming in roadmap."
                 sleep 1
                 ;;
@@ -284,6 +285,51 @@ _menu_clients_for() {
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
         esac
     done
+}
+
+_clients_list_compact() {
+    local iface="$1"
+    local conf_file
+    conf_file="$(conf_path "$iface")"
+
+    if [[ ! -f "$conf_file" ]] || ! grep -q '^\[Peer\]' "$conf_file" 2>/dev/null; then
+        echo -e "  ${YELLOW}No clients yet.${NC}"
+        echo
+        return
+    fi
+
+    printf "  ${BOLD}%-4s %-20s %-18s %s${NC}\n" "ID" "NAME" "IP" "PUBLIC KEY"
+    echo "  ──────────────────────────────────────────────────────────────"
+
+    local idx=0 cur_name="" cur_pubkey="" cur_ip=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\[Peer\] ]]; then
+            if [[ -n "$cur_pubkey" ]]; then
+                idx=$(( idx + 1 ))
+                printf "  %-4s %-20s %-18s %.24s…\n" \
+                       "$idx" "${cur_name:--}" "${cur_ip:--}" "$cur_pubkey"
+            fi
+            cur_name=""; cur_pubkey=""; cur_ip=""
+        elif [[ "$line" =~ ^#[[:space:]]Name[[:space:]]*=[[:space:]]*(.*) ]]; then
+            cur_name="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^PublicKey[[:space:]]*=[[:space:]]*(.*) ]]; then
+            cur_pubkey="${BASH_REMATCH[1]// /}"
+        elif [[ "$line" =~ ^AllowedIPs[[:space:]]*=[[:space:]]*(.*) ]]; then
+            cur_ip="${BASH_REMATCH[1]%%/*}"; cur_ip="${cur_ip// /}"
+        fi
+    done < "$conf_file"
+
+    if [[ -n "$cur_pubkey" ]]; then
+        idx=$(( idx + 1 ))
+        printf "  %-4s %-20s %-18s %.24s…\n" \
+               "$idx" "${cur_name:--}" "${cur_ip:--}" "$cur_pubkey"
+    fi
+
+    local stats
+    stats="$(pool_stats "$iface")"
+    echo
+    echo -e "  Pool (total/used/free): ${BOLD}${stats}${NC}"
+    echo
 }
 
 # =============================================================================
