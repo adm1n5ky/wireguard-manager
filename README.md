@@ -1,4 +1,4 @@
-# wg-manager — WireGuard Multi-Instance Manager
+# WireGuard Multi-Instance Manager
 
 CLI-инструмент для Ubuntu 24/26 LTS.  
 Управляет несколькими WireGuard-серверами без БД и внешних сервисов.
