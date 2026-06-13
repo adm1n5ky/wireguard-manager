@@ -3,16 +3,10 @@
 # lib/config-list.sh — List all WireGuard instances (managed + unmanaged)
 # =============================================================================
 
-# --- Interface state helpers -------------------------------------------------
-
 _iface_state() {
     local iface="$1"
     if ip link show "$iface" &>/dev/null 2>&1; then
-        if ip link show "$iface" 2>/dev/null | head -1 | grep -q "UP"; then
-            echo "UP"
-        else
-            echo "DOWN"
-        fi
+        ip link show "$iface" 2>/dev/null | head -1 | grep -q "UP" && echo "UP" || echo "DOWN"
     else
         echo "STOPPED"
     fi
@@ -22,27 +16,21 @@ _iface_boot() {
     local iface="$1"
     local backend
     backend="$(backend_for_iface "$iface" 2>/dev/null || echo "wg")"
-    if systemctl is-enabled "$(_systemd_unit "$backend" "$iface")" &>/dev/null; then
-        echo "YES"
-    else
-        echo "NO"
-    fi
+    systemctl is-enabled "$(_systemd_unit "$backend" "$iface")" &>/dev/null && echo "YES" || echo "NO"
+}
+
+_iface_id() {
+    local iface="$1"
+    ip link show "$iface" 2>/dev/null | awk -F': ' 'NR==1{print $1}' | tr -d ' '
 }
 
 _conf_address() {
-    local conf="$1"
-    grep -m1 "^Address" "$conf" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
+    grep -m1 "^Address" "$1" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
 }
 
 _conf_port() {
-    local conf="$1"
-    grep -m1 "^ListenPort" "$conf" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
+    grep -m1 "^ListenPort" "$1" 2>/dev/null | sed 's/.*=\s*//' | tr -d ' '
 }
-
-# --- Peers summary: total/created/active ------------------------------------
-# total   = usable IPs in subnet minus server itself
-# created = [Peer] sections in .conf
-# active  = peers with handshake in last 180 seconds
 
 _peers_summary() {
     local iface="$1"
@@ -57,8 +45,7 @@ _peers_summary() {
     if [[ -n "$network" ]]; then
         prefix="${network#*/}"
         if [[ "$prefix" =~ ^[0-9]+$ ]] && (( prefix <= 30 )); then
-            local hosts=$(( (1 << (32 - prefix)) - 2 ))
-            total=$(( hosts - 1 ))
+            total=$(( (1 << (32 - prefix)) - 3 ))
         fi
     fi
 
@@ -70,41 +57,44 @@ _peers_summary() {
         active="$(backend_show "$iface" 2>/dev/null | \
             grep "latest handshake" | \
             awk -v now="$(date +%s)" '{
-                for (i=1;i<=NF;i++) if ($i~/^[0-9]+$/ && $i>1000000) {
-                    if (now-$i < 180) c++; break
-                }
-            } END {print c+0}')"
+                for(i=1;i<=NF;i++) if($i~/^[0-9]+$/ && $i>1000000){if(now-$i<180)c++;break}
+            } END{print c+0}')"
     fi
 
     echo "${total}/${created}/${active}"
 }
 
-# --- State colour helper -----------------------------------------------------
+# Print a row without ANSI codes breaking printf padding.
+# We use plain printf for the fixed columns, then append coloured words manually.
+_row() {
+    # $1=id $2=iface $3=backend $4=state $5=boot $6=mgr_plain $7=addr $8=port $9=peers
+    # $10=state_colour $11=mgr_colour
+    local id="$1" iface="$2" backend="$3" state="$4" boot="$5"
+    local mgr_plain="$6" addr="$7" port="$8" peers="$9"
+    local state_col="${10}" mgr_col="${11}"
 
-_state_col() {
-    local state="$1"
-    case "$state" in
-        UP)      echo -e "${GREEN}${state}${NC}" ;;
-        DOWN)    echo -e "${YELLOW}${state}${NC}" ;;
-        STOPPED) echo -e "${RED}${state}${NC}" ;;
-        *)       echo "$state" ;;
-    esac
+    # Fixed-width plain part (no ANSI codes inside printf format)
+    printf "  %-4s %-16s %-8s " "$id" "$iface" "$backend"
+    # Coloured STATE — pad to 9 chars (longest: STOPPED=7 + 2 spaces)
+    printf "%b%-$((9 - ${#state}))s" "$state_col" ""
+    printf "%-5s " "$boot"
+    # Coloured MGR — pad to 5 chars
+    printf "%b%-$((5 - ${#mgr_plain}))s" "$mgr_col" ""
+    printf "%-22s %-6s %s\n" "$addr" "$port" "$peers"
 }
 
-# --- Main listing ------------------------------------------------------------
-
 config_list() {
+    local SEP="══════════════════════════════════════════════════════════════════════════════"
     echo
-    echo -e "${BOLD}══════════════════════════════════════════════════════════════════════════${NC}"
-    printf "${BOLD}  %-4s %-16s %-8s %-9s %-5s %-4s %-22s %-6s %s${NC}\n" \
+    echo -e "${BOLD}${SEP}${NC}"
+    printf "${BOLD}  %-4s %-16s %-8s %-9s %-5s %-5s %-22s %-6s %s${NC}\n" \
            "ID" "INTERFACE" "BACKEND" "STATE" "BOOT" "MGR" "ADDRESS" "PORT" "PEERS"
-    echo -e "${BOLD}══════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}${SEP}${NC}"
 
     local found=0
-    local idx=0
     declare -A seen
 
-    # ── 1. Managed instances (have .env) ─────────────────────────────────────
+    # ── 1. Managed instances ──────────────────────────────────────────────────
     for env_file in "${WG_CONFIG_DIR}"/*.env; do
         [[ -f "$env_file" ]] || continue
 
@@ -113,57 +103,55 @@ config_list() {
         network="$(env_get "$env_file" WG_SERVER_IP)"
         [[ -z "$network" ]] && network="$(env_get "$env_file" WG_NETWORK)"
         port="$(env_get    "$env_file" WG_PORT)"
-        backend="$(env_get "$env_file" WG_BACKEND)"
-        backend="${backend:-wg}"
-
+        backend="$(env_get "$env_file" WG_BACKEND)"; backend="${backend:-wg}"
         [[ -z "$name" ]] && continue
-        idx=$(( idx + 1 ))
+
         seen["$name"]=1
         found=1
 
-        local state boot peers
-        state="$(_iface_state "$name")"
-        boot="$(_iface_boot   "$name")"
+        local sys_id state boot peers state_col
+        sys_id="$(_iface_id "$name")"; sys_id="${sys_id:--}"
+        state="$(_iface_state  "$name")"
+        boot="$(_iface_boot    "$name")"
         peers="$(_peers_summary "$name")"
 
-        printf "  %-4s %-16s %-8s %-18s %-5s %-13s %-22s %-6s %s\n" \
-               "$idx" \
-               "$name" \
-               "$backend" \
-               "$(_state_col "$state")" \
-               "$boot" \
-               "$(echo -e "${GREEN}yes${NC}")" \
-               "${network:--}" \
-               "${port:--}" \
-               "$peers"
+        case "$state" in
+            UP)      state_col="${GREEN}${state}${NC}" ;;
+            DOWN)    state_col="${YELLOW}${state}${NC}" ;;
+            STOPPED) state_col="${RED}${state}${NC}" ;;
+            *)       state_col="${state}" ;;
+        esac
+
+        _row "$sys_id" "$name" "$backend" "$state" "$boot" \
+             "yes" "${network:--}" "${port:--}" "$peers" \
+             "$state_col" "${GREEN}yes${NC}"
     done
 
-    # ── 2. Unmanaged .conf files (no matching .env) ───────────────────────────
+    # ── 2. Unmanaged .conf files ──────────────────────────────────────────────
     for conf_file in "${WG_CONFIG_DIR}"/*.conf; do
         [[ -f "$conf_file" ]] || continue
-
         local name
         name="$(basename "$conf_file" .conf)"
         [[ -n "${seen[$name]+_}" ]] && continue
         found=1
-        idx=$(( idx + 1 ))
 
-        local address port_c state boot
+        local address port_c state boot state_col sys_id
         address="$(_conf_address "$conf_file")"
-        port_c="$(_conf_port    "$conf_file")"
-        state="$(_iface_state   "$name")"
-        boot="$(_iface_boot     "$name")"
+        port_c="$(_conf_port     "$conf_file")"
+        state="$(_iface_state    "$name")"
+        boot="$(_iface_boot      "$name")"
+        sys_id="$(_iface_id      "$name")"; sys_id="${sys_id:--}"
 
-        printf "  %-4s %-16s %-8s %-18s %-5s %-13s %-22s %-6s %s\n" \
-               "$idx" \
-               "$name" \
-               "-" \
-               "$(_state_col "$state")" \
-               "$boot" \
-               "$(echo -e "${YELLOW}no${NC} ")" \
-               "${address:--}" \
-               "${port_c:--}" \
-               "-"
+        case "$state" in
+            UP)      state_col="${GREEN}${state}${NC}" ;;
+            DOWN)    state_col="${YELLOW}${state}${NC}" ;;
+            STOPPED) state_col="${RED}${state}${NC}" ;;
+            *)       state_col="${state}" ;;
+        esac
+
+        _row "$sys_id" "$name" "-" "$state" "$boot" \
+             "no" "${address:--}" "${port_c:--}" "-" \
+             "$state_col" "${YELLOW}no${NC}"
     done
 
     if [[ $found -eq 0 ]]; then
@@ -171,8 +159,8 @@ config_list() {
         echo    "  Use 'Servers → Create server' to add one."
     fi
 
-    echo -e "${BOLD}══════════════════════════════════════════════════════════════════════════${NC}"
-    echo -e "  ${CYAN}PEERS: total/created/active  |  MGR: ${GREEN}yes${NC}${CYAN} = managed  |  ${YELLOW}no${NC}${CYAN} = manual${NC}"
+    echo -e "${BOLD}${SEP}${NC}"
+    echo -e "  ${CYAN}ID=system iface id  |  PEERS: total/created/active  |  MGR: ${GREEN}yes${NC}${CYAN}=managed ${YELLOW}no${NC}${CYAN}=manual${NC}"
     echo
     pause
 }

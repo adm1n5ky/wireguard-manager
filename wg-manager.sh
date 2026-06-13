@@ -3,7 +3,7 @@
 # wg-manager.sh — WireGuard Multi-Instance Manager
 # Ubuntu 24/26 LTS | v1.1
 # =============================================================================
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
