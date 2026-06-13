@@ -48,7 +48,7 @@ validate_endpoint() {
 prompt_endpoint() {
     local detected
 
-    echo
+    echo >&2
     info "Detecting public IP address..." >&2
 
     local suggested=""

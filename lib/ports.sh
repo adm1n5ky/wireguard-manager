@@ -64,7 +64,7 @@ prompt_port() {
     local port err
 
     while true; do
-        echo
+        echo >&2
         read -rp "Listen port [${suggested}]: " port
         port="${port:-$suggested}"
 
