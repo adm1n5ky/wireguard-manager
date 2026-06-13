@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/common.sh — Logging, system utilities, dependency management
+# lib/common.sh — Logging, system utilities, dependency bootstrap
 # =============================================================================
 
 # --- Colours -----------------------------------------------------------------
@@ -34,25 +34,29 @@ pause() {
     read -rp "Press Enter to continue..." _
 }
 
-# --- Dependency management ---------------------------------------------------
-
-REQUIRED_PACKAGES=(wireguard-tools ipcalc curl)
+# --- Package helper ----------------------------------------------------------
 
 _pkg_installed() {
     dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
 }
 
+# --- Bootstrap dependency check ----------------------------------------------
+# Minimal check on first run: at least one backend + ipcalc + curl.
+# Full package management lives in system.sh / menu_system.
+
+BOOTSTRAP_REQUIRED=(ipcalc curl)
+
 check_dependencies() {
     local missing=()
 
-    for pkg in "${REQUIRED_PACKAGES[@]}"; do
-        _pkg_installed "$pkg" || missing+=("$pkg")
-    done
-
-    # Also check for 'wg' binary directly (might be installed differently)
-    if ! command -v wg &>/dev/null && ! printf '%s\n' "${missing[@]}" | grep -q "wireguard"; then
+    # Must have at least one working backend
+    if ! command -v wg &>/dev/null && ! command -v awg &>/dev/null; then
         missing+=(wireguard-tools)
     fi
+
+    for pkg in "${BOOTSTRAP_REQUIRED[@]}"; do
+        _pkg_installed "$pkg" || missing+=("$pkg")
+    done
 
     if [[ ${#missing[@]} -eq 0 ]]; then
         return 0
@@ -73,16 +77,16 @@ check_dependencies() {
     msg "Installing: ${missing[*]}"
     apt-get install -y "${missing[@]}" || die "Failed to install packages."
 
-    ok "All dependencies installed."
+    ok "Dependencies installed."
 }
 
 # --- WireGuard config paths --------------------------------------------------
 
 WG_CONFIG_DIR="/etc/wireguard"
 
-conf_path()  { echo "${WG_CONFIG_DIR}/${1}.conf"; }
-env_path()   { echo "${WG_CONFIG_DIR}/${1}.env"; }
-key_dir()    { echo "${WG_CONFIG_DIR}/server-${1}"; }
+conf_path() { echo "${WG_CONFIG_DIR}/${1}.conf"; }
+env_path()  { echo "${WG_CONFIG_DIR}/${1}.env"; }
+key_dir()   { echo "${WG_CONFIG_DIR}/server-${1}"; }
 
 # --- Read .env safely (no source!) -------------------------------------------
 

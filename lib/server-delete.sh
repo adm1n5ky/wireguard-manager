@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/server-delete.sh — Safe WireGuard server removal
-# IMPORTANT: Never `source` .env — all values parsed via grep/env_get
+# lib/server-delete.sh — Safe WireGuard / AmneziaWG server removal
+# IMPORTANT: Never `source` .env — all values parsed via env_get
 # =============================================================================
 
 server_delete() {
     echo
     echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║   Delete WireGuard Server            ║${NC}"
+    echo -e "${BOLD}║   Delete Server                      ║${NC}"
     echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
     echo
 
-    # List available instances
     local instances
     mapfile -t instances < <(list_wg_instances)
 
@@ -25,9 +24,10 @@ server_delete() {
     local i
     for i in "${!instances[@]}"; do
         local name="${instances[$i]}"
-        local state
+        local state backend
         state="$(_iface_state "$name")"
-        printf "  %d) %-15s [%s]\n" $(( i + 1 )) "$name" "$state"
+        backend="$(backend_for_iface "$name")"
+        printf "  %d) %-15s [%s] (%s)\n" $(( i + 1 )) "$name" "$state" "$backend"
     done
     echo "  0) Cancel"
     echo
@@ -51,15 +51,24 @@ server_delete() {
     env_file="$(env_path "$iface")"
     conf_file="$(conf_path "$iface")"
 
-    # Read paths from .env SAFELY (no source)
-    local keydir
-    keydir="$(env_get "$env_file" WG_KEY_DIR)"
+    local keydir backend
+    keydir="$(env_get   "$env_file" WG_KEY_DIR)"
+    backend="$(env_get  "$env_file" WG_BACKEND)"
+    backend="${backend:-wg}"
+
+    local peer_count=0
+    if [[ -f "$conf_file" ]]; then
+        peer_count="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
+    fi
 
     echo
     echo -e "${RED}  !! This will permanently delete: !!${NC}"
     echo "     Config:    ${conf_file}"
     echo "     Env file:  ${env_file}"
     [[ -n "$keydir" ]] && echo "     Keys dir:  ${keydir}/"
+    if (( peer_count > 0 )); then
+        echo -e "     ${RED}Peers:     ${peer_count} client config(s) will be lost!${NC}"
+    fi
     echo
 
     read -rp "Type the interface name to confirm deletion (${iface}): " confirm_name
@@ -70,22 +79,21 @@ server_delete() {
     fi
 
     # ── Stop interface ────────────────────────────────────────────────────────
-    if ip link show "$iface" &>/dev/null; then
+    if backend_is_up "$iface"; then
         msg "Stopping interface ${iface}..."
-        systemctl stop "wg-quick@${iface}" 2>/dev/null || \
-            wg-quick down "$iface" 2>/dev/null || \
-            warn "Could not stop interface gracefully (it may already be down)."
+        backend_stop "$iface" 2>/dev/null || \
+            backend_down "$iface" 2>/dev/null || \
+            warn "Could not stop interface gracefully (may already be down)."
     fi
 
     # ── Disable systemd ───────────────────────────────────────────────────────
-    if systemctl is-enabled "wg-quick@${iface}" &>/dev/null; then
+    if backend_is_enabled "$iface"; then
         msg "Disabling systemd service..."
-        systemctl disable "wg-quick@${iface}" &>/dev/null
+        backend_disable "$iface"
         ok "Service disabled."
     fi
 
-    # ── Remove files ─────────────────────────────────────────────────────────
-
+    # ── Remove files ──────────────────────────────────────────────────────────
     if [[ -f "$conf_file" ]]; then
         rm -f "$conf_file"
         ok "Removed: ${conf_file}"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/server-create.sh — Interactive WireGuard server creation
+# lib/server-create.sh — Interactive WireGuard / AmneziaWG server creation
 # =============================================================================
 
 DEFAULT_MTU=1420
@@ -8,46 +8,58 @@ DEFAULT_MTU=1420
 server_create() {
     echo
     echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║   Create New WireGuard Server        ║${NC}"
+    echo -e "${BOLD}║   Create New Server                  ║${NC}"
     echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
     echo
 
-    # ── Step 1: Interface name ────────────────────────────────────────────────
-    echo -e "${CYAN}── Step 1: Interface Name ──${NC}"
+    # ── Step 1: Backend ───────────────────────────────────────────────────────
+    echo -e "${CYAN}── Step 1: Backend ──${NC}"
+    local backend
+    backend="$(prompt_backend)" || return 1
+
+    if ! backend_check "$backend"; then
+        warn "Backend '${backend}' is not properly installed."
+        pause
+        return 1
+    fi
+
+    # ── Step 2: Interface name ────────────────────────────────────────────────
+    echo
+    echo -e "${CYAN}── Step 2: Interface Name ──${NC}"
     local iface
     iface="$(prompt_iface_name)" || return 1
 
-    # ── Step 2: Network CIDR ─────────────────────────────────────────────────
+    # ── Step 3: Network CIDR ──────────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 2: Network (CIDR) ──${NC}"
+    echo -e "${CYAN}── Step 3: Network (CIDR) ──${NC}"
     local cidr conflict
 
     while true; do
         cidr="$(prompt_cidr)" || return 1
 
-        local conflict_result
-        conflict_result="$(network_conflicts "$cidr")" && {
-            warn "Network ${cidr} overlaps with existing config: ${conflict_result}"
+        conflict="$(network_conflicts "$cidr")"
+        if [[ $? -eq 0 ]]; then
+            warn "Network ${cidr} overlaps with existing config: ${conflict}"
             warn "Choose a different network."
-            continue
-        }
-        break
+        else
+            break
+        fi
     done
 
-    # ── Step 3: Server IP (auto) ──────────────────────────────────────────────
+    # ── Step 4: Server IP (auto) ──────────────────────────────────────────────
     local server_ip
     server_ip="$(network_to_server_ip "$cidr")"
     info "Server address will be: ${BOLD}${server_ip}${NC}"
 
-    # ── Step 4: Listen port ───────────────────────────────────────────────────
+    # ── Step 5: Listen port ───────────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 3: Listen Port ──${NC}"
+    echo -e "${CYAN}── Step 4: Listen Port ──${NC}"
     local port
     port="$(prompt_port)" || return 1
 
-    # ── Step 5: MTU ───────────────────────────────────────────────────────────
+    # ── Step 6: MTU ───────────────────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 4: MTU ──${NC}"
+    echo -e "${CYAN}── Step 5: MTU ──${NC}"
     local mtu err
 
     while true; do
@@ -61,26 +73,26 @@ server_create() {
         warn "$err"
     done
 
-    # ── Step 6: Key directory ─────────────────────────────────────────────────
+    # ── Step 7: Key directory ─────────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 5: Key Directory ──${NC}"
+    echo -e "${CYAN}── Step 6: Key Directory ──${NC}"
     local default_keydir
     default_keydir="$(key_dir "$iface")"
     local keydir
 
     read -rp "Key directory [${default_keydir}]: " keydir
     keydir="${keydir:-$default_keydir}"
-    keydir="${keydir%/}"   # strip trailing slash
+    keydir="${keydir%/}"
 
-    # ── Step 7: Endpoint ─────────────────────────────────────────────────────
+    # ── Step 8: Endpoint ──────────────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 6: Endpoint ──${NC}"
+    echo -e "${CYAN}── Step 7: Endpoint ──${NC}"
     local endpoint
     endpoint="$(prompt_endpoint)" || return 1
 
-    # ── Step 8: PSK mode ─────────────────────────────────────────────────────
+    # ── Step 9: PSK mode ──────────────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 7: Pre-shared Keys ──${NC}"
+    echo -e "${CYAN}── Step 8: Pre-shared Keys ──${NC}"
     local use_psk
     read -rp "Use unique PSK per client? [Y/n]: " use_psk
     use_psk="${use_psk:-Y}"
@@ -90,9 +102,9 @@ server_create() {
         use_psk="no"
     fi
 
-    # ── Step 9: Client-to-client ─────────────────────────────────────────────
+    # ── Step 10: Client-to-client ─────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 8: Client-to-Client Traffic ──${NC}"
+    echo -e "${CYAN}── Step 9: Client-to-Client Traffic ──${NC}"
     local c2c
     read -rp "Allow client-to-client communication by default? [y/N]: " c2c
     c2c="${c2c:-N}"
@@ -107,6 +119,7 @@ server_create() {
     echo -e "${BOLD}══════════════════════════════════════${NC}"
     echo -e "${BOLD}  Summary${NC}"
     echo -e "${BOLD}══════════════════════════════════════${NC}"
+    printf "  %-28s %s\n" "Backend:"            "$backend"
     printf "  %-28s %s\n" "Interface:"          "$iface"
     printf "  %-28s %s\n" "Network:"            "$cidr"
     printf "  %-28s %s\n" "Server address:"     "$server_ip"
@@ -131,10 +144,10 @@ server_create() {
     mkdir -p "$keydir"
     chmod 700 "$keydir"
 
-    msg "Generating WireGuard keys..."
+    msg "Generating keys (backend: ${backend})..."
     local private_key public_key
-    private_key="$(wg genkey)"
-    public_key="$(echo "$private_key" | wg pubkey)"
+    private_key="$(backend_genkey "$backend")"
+    public_key="$(echo "$private_key" | backend_pubkey "$backend")"
 
     local priv_file="${keydir}/private.key"
     local pub_file="${keydir}/public.key"
@@ -154,6 +167,7 @@ server_create() {
     cat > "$conf_file" <<EOF
 # WireGuard server configuration — managed by wg-manager
 # Interface: ${iface}
+# Backend:   ${backend}
 # Created:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # DO NOT EDIT manually if using wg-manager.
 
@@ -163,7 +177,7 @@ Address    = ${server_ip}
 ListenPort = ${port}
 MTU        = ${mtu}
 
-# Peers will be added here by wg-manager (future: client-create)
+# Peers will be added here by wg-manager (client-create)
 EOF
 
     chmod 600 "$conf_file"
@@ -179,6 +193,7 @@ EOF
     cat > "$env_file" <<EOF
 # wg-manager metadata — DO NOT EDIT manually
 WG_NAME=${iface}
+WG_BACKEND=${backend}
 WG_NETWORK=${cidr}
 WG_SERVER_IP=${server_ip}
 WG_PORT=${port}
@@ -197,29 +212,32 @@ EOF
     ok "Metadata written."
 
     # ── Enable systemd service ────────────────────────────────────────────────
-    msg "Enabling systemd service: wg-quick@${iface}"
-    systemctl enable "wg-quick@${iface}" &>/dev/null
+    local unit
+    unit="$(_systemd_unit "$backend" "$iface")"
+    msg "Enabling systemd service: ${unit}"
+    backend_enable "$iface"
     ok "Service enabled (will start on next boot)."
 
-    # ── Offer to start the interface ─────────────────────────────────────────
+    # ── Offer to start the interface ──────────────────────────────────────────
     echo
-    read -rp "Start WireGuard interface now? [Y/n]: " start_now
+    read -rp "Start interface now? [Y/n]: " start_now
     start_now="${start_now:-Y}"
 
     if [[ "${start_now,,}" == "y" ]]; then
-        msg "Starting wg-quick@${iface}..."
-        if systemctl start "wg-quick@${iface}"; then
+        msg "Starting ${unit}..."
+        if backend_start "$iface"; then
             ok "Interface ${iface} is UP."
         else
-            warn "Failed to start interface. Check: journalctl -u wg-quick@${iface}"
+            warn "Failed to start. Check: journalctl -u ${unit}"
         fi
     else
-        info "You can start it later: systemctl start wg-quick@${iface}"
+        info "Start later: systemctl start ${unit}"
     fi
 
     echo
     ok "Server '${iface}' created successfully."
     echo
+    info "Backend:    ${BOLD}${backend}${NC}"
     info "Public key: ${BOLD}${public_key}${NC}"
     info "Config:     ${conf_file}"
     info "Env:        ${env_file}"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/status.sh — Detailed interface status, wg show, up/down management
+# lib/status.sh — Interface status, up/down management
 # =============================================================================
 
 # --- Pick an instance interactively ------------------------------------------
@@ -19,9 +19,10 @@ _pick_instance() {
     local i
     for i in "${!instances[@]}"; do
         local name="${instances[$i]}"
-        local state
+        local state backend
         state="$(_iface_state "$name")"
-        printf "  %d) %-15s [%s]\n" $(( i + 1 )) "$name" "$state"
+        backend="$(backend_for_iface "$name")"
+        printf "  %d) %-15s [%s] (%s)\n" $(( i + 1 )) "$name" "$state" "$backend"
     done
     echo "  0) Cancel"
     echo
@@ -52,16 +53,19 @@ server_status() {
     local iface
     iface="$(_pick_instance "Select interface")" || { pause; return 0; }
 
+    local backend
+    backend="$(backend_for_iface "$iface")"
+
     echo
     echo -e "${BOLD}── ip link ──────────────────────────────${NC}"
     ip link show "$iface" 2>/dev/null || warn "Interface not found in kernel."
 
     echo
-    echo -e "${BOLD}── wg show ──────────────────────────────${NC}"
-    if ip link show "$iface" &>/dev/null; then
-        wg show "$iface" 2>/dev/null || warn "wg show failed (interface may be down)."
+    echo -e "${BOLD}── ${backend} show ─────────────────────────────${NC}"
+    if backend_is_up "$iface"; then
+        backend_show "$iface" 2>/dev/null || warn "${backend} show failed."
     else
-        warn "Interface '${iface}' is not up — nothing to show from wg."
+        warn "Interface '${iface}' is not up — nothing to show."
     fi
 
     echo
@@ -69,7 +73,6 @@ server_status() {
     local env_file
     env_file="$(env_path "$iface")"
     if [[ -f "$env_file" ]]; then
-        # Print key fields only (not private key)
         grep -v "PRIVATE_KEY" "$env_file" | grep -v "^#" | grep -v "^$" | \
             sed 's/^/  /'
     else
@@ -83,13 +86,13 @@ server_status() {
 
 server_up() {
     echo
-    echo -e "${CYAN}── Start WireGuard Interface ──${NC}"
+    echo -e "${CYAN}── Start Interface ──${NC}"
     echo
 
     local iface
     iface="$(_pick_instance "Select interface to start")" || { pause; return 0; }
 
-    if ip link show "$iface" &>/dev/null; then
+    if backend_is_up "$iface"; then
         local state
         state="$(_iface_state "$iface")"
         if [[ "$state" == "UP" ]]; then
@@ -99,11 +102,15 @@ server_up() {
         fi
     fi
 
-    msg "Starting wg-quick@${iface}..."
-    if systemctl start "wg-quick@${iface}"; then
+    local backend unit
+    backend="$(backend_for_iface "$iface")"
+    unit="$(_systemd_unit "$backend" "$iface")"
+
+    msg "Starting ${unit}..."
+    if backend_start "$iface"; then
         ok "Interface '${iface}' is now UP."
     else
-        warn "Failed to start. Check: journalctl -u wg-quick@${iface} -n 30"
+        warn "Failed to start. Check: journalctl -u ${unit} -n 30"
     fi
 
     pause
@@ -113,23 +120,27 @@ server_up() {
 
 server_down() {
     echo
-    echo -e "${CYAN}── Stop WireGuard Interface ──${NC}"
+    echo -e "${CYAN}── Stop Interface ──${NC}"
     echo
 
     local iface
     iface="$(_pick_instance "Select interface to stop")" || { pause; return 0; }
 
-    if ! ip link show "$iface" &>/dev/null; then
+    if ! backend_is_up "$iface"; then
         warn "Interface '${iface}' is already down."
         pause
         return 0
     fi
 
-    msg "Stopping wg-quick@${iface}..."
-    if systemctl stop "wg-quick@${iface}"; then
+    local backend unit
+    backend="$(backend_for_iface "$iface")"
+    unit="$(_systemd_unit "$backend" "$iface")"
+
+    msg "Stopping ${unit}..."
+    if backend_stop "$iface"; then
         ok "Interface '${iface}' is now DOWN."
     else
-        warn "Failed to stop. Check: journalctl -u wg-quick@${iface} -n 30"
+        warn "Failed to stop. Check: journalctl -u ${unit} -n 30"
     fi
 
     pause
