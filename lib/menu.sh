@@ -43,76 +43,7 @@ _print_instance_summary() {
 # =============================================================================
 
 _servers_list_compact() {
-    # Reuse shared rendering from config-list.sh (without pause)
-    local SEP="════════════════════════════════════════════════════════════════════════════════"
-    echo
-    echo -e "${BOLD}${SEP}${NC}"
-    printf "${BOLD}  %-4s %-16s %-8s %-9s %-5s %-5s %-22s %-6s %s${NC}
-" \
-           "ID" "INTERFACE" "BACKEND" "STATE" "BOOT" "MGR" "ADDRESS" "PORT" "PEERS"
-    echo -e "${BOLD}${SEP}${NC}"
-
-    local found=0
-    declare -A seen
-
-    for env_file in "${WG_CONFIG_DIR}"/*.env; do
-        [[ -f "$env_file" ]] || continue
-        local name network port backend
-        name="$(env_get    "$env_file" WG_NAME)"
-        network="$(env_get "$env_file" WG_SERVER_IP)"
-        [[ -z "$network" ]] && network="$(env_get "$env_file" WG_NETWORK)"
-        port="$(env_get    "$env_file" WG_PORT)"
-        backend="$(env_get "$env_file" WG_BACKEND)"; backend="${backend:-wg}"
-        [[ -z "$name" ]] && continue
-        seen["$name"]=1
-        found=1
-
-        local sys_id state boot peers state_col
-        sys_id="$(_iface_id "$name")"; sys_id="${sys_id:--}"
-        state="$(_iface_state  "$name")"
-        boot="$(_iface_boot    "$name")"
-        peers="$(_peers_summary "$name")"
-        case "$state" in
-            UP)      state_col="${GREEN}${state}${NC}" ;;
-            DOWN)    state_col="${YELLOW}${state}${NC}" ;;
-            STOPPED) state_col="${RED}${state}${NC}" ;;
-            *)       state_col="${state}" ;;
-        esac
-        _row "$sys_id" "$name" "$backend" "$state" "$boot" \
-             "yes" "${network:--}" "${port:--}" "$peers" \
-             "$state_col" "${GREEN}yes${NC}"
-    done
-
-    for conf_file in "${WG_CONFIG_DIR}"/*.conf; do
-        [[ -f "$conf_file" ]] || continue
-        local name; name="$(basename "$conf_file" .conf)"
-        [[ -n "${seen[$name]+_}" ]] && continue
-        found=1
-
-        local address port_c state boot state_col sys_id
-        address="$(_conf_address "$conf_file")"
-        port_c="$(_conf_port     "$conf_file")"
-        state="$(_iface_state    "$name")"
-        boot="$(_iface_boot      "$name")"
-        sys_id="$(_iface_id      "$name")"; sys_id="${sys_id:--}"
-        case "$state" in
-            UP)      state_col="${GREEN}${state}${NC}" ;;
-            DOWN)    state_col="${YELLOW}${state}${NC}" ;;
-            STOPPED) state_col="${RED}${state}${NC}" ;;
-            *)       state_col="${state}" ;;
-        esac
-        _row "$sys_id" "$name" "-" "$state" "$boot" \
-             "no" "${address:--}" "${port_c:--}" "-" \
-             "$state_col" "${YELLOW}no${NC}"
-    done
-
-    if [[ $found -eq 0 ]]; then
-        echo -e "  ${YELLOW}No WireGuard configs found.${NC}"
-    fi
-
-    echo -e "${BOLD}${SEP}${NC}"
-    echo -e "  ${CYAN}ID=system iface id  |  PEERS: total/created/active  |  MGR: ${GREEN}yes${NC}${CYAN}=managed ${YELLOW}no${NC}${CYAN}=manual${NC}"
-    echo
+    config_list_inline
 }
 
 # Count peers: total_in_pool / created_in_conf / active_handshake
