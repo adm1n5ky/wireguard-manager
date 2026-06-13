@@ -134,7 +134,10 @@ _table_rows() {
         boot="$(_iface_boot      "$name")"
         sys_id="$(_iface_id      "$name")"
 
-        table_row "$sys_id" "$name" "-" "$state" "$boot" \
+        local backend_u
+        backend_u="$(backend_for_iface "$name" 2>/dev/null || echo "wg")"
+
+        table_row "$sys_id" "$name" "$backend_u" "$state" "$boot" \
                   "no" "${address:--}" "${port_c:--}" "-" \
                   "$(_state_colour "$state")" "${YELLOW}no${NC}"
     done
