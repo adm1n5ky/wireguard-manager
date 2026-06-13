@@ -188,17 +188,17 @@ backend_down() {
 # Prints chosen backend ("wg" or "awg"). Returns 1 on cancel.
 
 prompt_backend() {
-    echo
-    info "Available backends:"
+    echo >&2
+    info "Available backends:" >&2
     local opts=()
 
     if command -v wg &>/dev/null && command -v wg-quick &>/dev/null; then
         opts+=("wg")
-        echo "  1) WireGuard   (wg)"
+        echo "  1) WireGuard   (wg)" >&2
     fi
     if command -v awg &>/dev/null && command -v awg-quick &>/dev/null; then
         opts+=("awg")
-        echo "  ${#opts[@]}) AmneziaWG  (awg)"
+        echo "  ${#opts[@]}) AmneziaWG  (awg)" >&2
     fi
 
     if [[ ${#opts[@]} -eq 0 ]]; then
@@ -206,14 +206,14 @@ prompt_backend() {
     fi
 
     if [[ ${#opts[@]} -eq 1 ]]; then
-        info "Only one backend available: ${opts[0]}"
+        info "Only one backend available: ${opts[0]}" >&2
         echo "${opts[0]}"
         return 0
     fi
 
     local choice
     while true; do
-        read -rp "Select backend [1]: " choice
+        read -rp "Select backend [1]: " choice >&2
         choice="${choice:-1}"
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#opts[@]} )); then
             echo "${opts[$(( choice - 1 ))]}"
