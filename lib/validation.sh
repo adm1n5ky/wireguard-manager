@@ -3,37 +3,29 @@
 # lib/validation.sh — Input validation: interface names, CIDR, ports
 # =============================================================================
 
-# --- Interface name ----------------------------------------------------------
-# Rules: [a-zA-Z0-9_-], max 15 chars, must not already exist in system or /etc/wireguard
-
 validate_iface_name() {
     local name="$1"
 
-    # Character set
     if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
         echo "Interface name may only contain letters, digits, underscores and hyphens."
         return 1
     fi
 
-    # Length
     if (( ${#name} > 15 )); then
         echo "Interface name must be 15 characters or fewer (got ${#name})."
         return 1
     fi
 
-    # Not already a live network interface
     if ip link show "$name" &>/dev/null; then
         echo "Interface '${name}' already exists in the system."
         return 1
     fi
 
-    # No existing .conf
     if [[ -f "$(conf_path "$name")" ]]; then
         echo "Config file $(conf_path "$name") already exists."
         return 1
     fi
 
-    # No existing .env
     if [[ -f "$(env_path "$name")" ]]; then
         echo "Env file $(env_path "$name") already exists."
         return 1
@@ -47,7 +39,7 @@ prompt_iface_name() {
 
     while true; do
         read -rp "Interface name (e.g. wg100): " name
-        name="${name// /}"      # strip spaces
+        name="${name// /}"
 
         if [[ -z "$name" ]]; then
             warn "Interface name cannot be empty."
@@ -63,14 +55,9 @@ prompt_iface_name() {
     done
 }
 
-# --- CIDR validation ---------------------------------------------------------
-
-# Checks that a string is a valid IPv4 CIDR and not a forbidden range.
-# Uses ipcalc if available, otherwise pure-bash checks.
 validate_cidr() {
     local cidr="$1"
 
-    # Basic format: x.x.x.x/n
     if [[ ! "$cidr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
         echo "Not a valid CIDR format (expected a.b.c.d/prefix)."
         return 1
@@ -80,7 +67,6 @@ validate_cidr() {
     ip="${cidr%/*}"
     prefix="${cidr#*/}"
 
-    # Octet range
     local IFS='.'
     read -ra octets <<< "$ip"
     for oct in "${octets[@]}"; do
@@ -91,30 +77,39 @@ validate_cidr() {
     done
     unset IFS
 
-    # Prefix range
     if (( prefix < 1 || prefix > 30 )); then
         echo "Prefix must be between /1 and /30 (got /${prefix})."
         return 1
     fi
 
-    # Forbidden: 0.0.0.0/0
     if [[ "$ip" == "0.0.0.0" && "$prefix" == "0" ]]; then
         echo "0.0.0.0/0 is not allowed."
         return 1
     fi
 
-    # Forbidden: /31 /32 (already caught above, but explicit)
     if (( prefix >= 31 )); then
         echo "Prefix /${prefix} is too small for a WireGuard network."
         return 1
     fi
 
-    # Validate network address is actually the base (host bits = 0)
+    # FIX: pure-bash host-bits check when ipcalc is unavailable
     if command -v ipcalc &>/dev/null; then
         local network
         network="$(ipcalc -n "$cidr" 2>/dev/null | grep -i '^Network:' | awk '{print $2}')"
         if [[ -n "$network" && "$network" != "$cidr" ]]; then
             echo "Address is a host address, not a network address. Did you mean ${network}?"
+            return 1
+        fi
+    else
+        # Pure bash: verify host bits are zero
+        local ip_int mask_int
+        ip_int="$(ip_to_int "$ip")"
+        mask_int="$(prefix_to_mask_int "$prefix")"
+        local host_bits=$(( ip_int & ~mask_int ))
+        if (( host_bits != 0 )); then
+            local network_ip
+            network_ip="$(int_to_ip $(( ip_int & mask_int )))"
+            echo "Address is a host address, not a network address. Did you mean ${network_ip}/${prefix}?"
             return 1
         fi
     fi
@@ -143,8 +138,6 @@ prompt_cidr() {
     done
 }
 
-# --- Port validation ---------------------------------------------------------
-
 validate_port() {
     local port="$1"
 
@@ -160,8 +153,6 @@ validate_port() {
 
     return 0
 }
-
-# --- MTU validation ----------------------------------------------------------
 
 validate_mtu() {
     local mtu="$1"

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
 # lib/server-delete.sh — Safe WireGuard / AmneziaWG server removal
-# IMPORTANT: Never `source` .env — all values parsed via env_get
 # =============================================================================
 
 server_delete() {
@@ -46,7 +45,6 @@ server_delete() {
         warn "Invalid selection."
     done
 
-    # ── Confirm ───────────────────────────────────────────────────────────────
     local env_file conf_file
     env_file="$(env_path "$iface")"
     conf_file="$(conf_path "$iface")"
@@ -78,7 +76,6 @@ server_delete() {
         return 0
     fi
 
-    # ── Stop interface ────────────────────────────────────────────────────────
     if backend_is_up "$iface"; then
         msg "Stopping interface ${iface}..."
         backend_stop "$iface" 2>/dev/null || \
@@ -86,14 +83,12 @@ server_delete() {
             warn "Could not stop interface gracefully (may already be down)."
     fi
 
-    # ── Disable systemd ───────────────────────────────────────────────────────
     if backend_is_enabled "$iface"; then
         msg "Disabling systemd service..."
         backend_disable "$iface"
         ok "Service disabled."
     fi
 
-    # ── Remove files ──────────────────────────────────────────────────────────
     if [[ -f "$conf_file" ]]; then
         rm -f "$conf_file"
         ok "Removed: ${conf_file}"

@@ -41,15 +41,12 @@ _pkg_installed() {
 }
 
 # --- Bootstrap dependency check ----------------------------------------------
-# Minimal check on first run: at least one backend + ipcalc + curl.
-# Full package management lives in system.sh / menu_system.
 
 BOOTSTRAP_REQUIRED=(ipcalc curl)
 
 check_dependencies() {
     local missing=()
 
-    # Must have at least one working backend
     if ! command -v wg &>/dev/null && ! command -v awg &>/dev/null; then
         missing+=(wireguard-tools)
     fi

@@ -4,17 +4,12 @@
 # =============================================================================
 
 DEFAULT_PORT=51820
-PORT_SCAN_MAX=100   # how many ports to try before giving up
-
-# --- Runtime check via ss ----------------------------------------------------
+PORT_SCAN_MAX=100
 
 port_used_runtime() {
     local port="$1"
-    # Check UDP (WireGuard uses UDP)
     ss -lnup 2>/dev/null | awk '{print $5}' | grep -q ":${port}$"
 }
-
-# --- Config-file check -------------------------------------------------------
 
 port_used_configs() {
     local port="$1"
@@ -28,14 +23,10 @@ port_used_configs() {
     return 1
 }
 
-# --- Combined check ----------------------------------------------------------
-
 port_in_use() {
     local port="$1"
     port_used_runtime "$port" || port_used_configs "$port"
 }
-
-# --- Find next free port -----------------------------------------------------
 
 find_free_port() {
     local start="${1:-$DEFAULT_PORT}"
@@ -49,11 +40,8 @@ find_free_port() {
         port=$(( port + 1 ))
     done
 
-    # Nothing found in range
     return 1
 }
-
-# --- Prompt for port with auto-suggestion ------------------------------------
 
 prompt_port() {
     local suggested

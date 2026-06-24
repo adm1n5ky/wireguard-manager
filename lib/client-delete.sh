@@ -43,23 +43,35 @@ client_delete() {
         warn "Invalid selection."
     done
 
-    # ── List clients on this server ───────────────────────────────────────────
+    _client_delete_on "$iface"
+}
+
+# --- Wrapper called from menu with pre-selected server ----------------------
+
+client_delete_for() {
+    local iface="$1"
+    _client_delete_on "$iface"
+}
+
+# --- Core deletion logic -----------------------------------------------------
+
+_client_delete_on() {
+    local iface="$1"
     local conf_file
     conf_file="$(conf_path "$iface")"
 
-    if [[ ! -f "$conf_file" ]]; then
-        warn "Config file not found: ${conf_file}"
+    if [[ ! -f "$conf_file" ]] || ! grep -q '^\[Peer\]' "$conf_file" 2>/dev/null; then
+        warn "No clients on '${iface}'."
         pause
         return 0
     fi
 
-    # Parse peers: collect name, pubkey, ip
+    # ── List clients ──────────────────────────────────────────────────────────
     local -a client_names client_pubkeys client_ips
     local cur_name="" cur_pubkey="" cur_ip=""
 
     while IFS= read -r line; do
         if [[ "$line" =~ ^\[Peer\] ]]; then
-            # Save previous peer if complete
             if [[ -n "$cur_pubkey" ]]; then
                 client_names+=("${cur_name:-unnamed}")
                 client_pubkeys+=("$cur_pubkey")
@@ -71,12 +83,11 @@ client_delete() {
         elif [[ "$line" =~ ^PublicKey[[:space:]]*=[[:space:]]*(.*) ]]; then
             cur_pubkey="${BASH_REMATCH[1]// /}"
         elif [[ "$line" =~ ^AllowedIPs[[:space:]]*=[[:space:]]*(.*) ]]; then
-            cur_ip="${BASH_REMATCH[1]%%/*}"
-            cur_ip="${cur_ip// /}"
+            cur_ip="${BASH_REMATCH[1]%%/*}"; cur_ip="${cur_ip// /}"
         fi
     done < "$conf_file"
 
-    # Last peer
+    # flush last peer
     if [[ -n "$cur_pubkey" ]]; then
         client_names+=("${cur_name:-unnamed}")
         client_pubkeys+=("$cur_pubkey")
@@ -91,6 +102,7 @@ client_delete() {
 
     echo
     echo "Clients on '${iface}':"
+    local i
     for i in "${!client_names[@]}"; do
         printf "  %d) %-20s  IP: %-16s  Key: %.16s…\n" \
                $(( i + 1 )) \
@@ -182,7 +194,8 @@ client_delete() {
 }
 
 # --- Remove a [Peer] block by public key from a .conf file -------------------
-# Removes the comment block (# Name, # Created) immediately before [Peer] too.
+# Removes the [Peer] header, all inline comments, and key=value lines
+# belonging to the target peer. Preceding blank lines are also removed.
 
 _remove_peer_from_conf() {
     local conf_file="$1"
@@ -195,28 +208,54 @@ _remove_peer_from_conf() {
     local -a buffer=()
 
     while IFS= read -r line; do
-        # Accumulate comment lines that precede a [Peer]
-        if [[ "$line" =~ ^#  || -z "$line" ]]; then
+
+        # Blank lines and comments go to buffer (pre-[Peer] metadata)
+        # BUT only when we are NOT already inside a peer being skipped.
+        if [[ -z "$line" || "$line" =~ ^# ]]; then
+            if (( skip == 1 )); then
+                # We are inside the target peer — discard, don't buffer
+                continue
+            fi
             buffer+=("$line")
             continue
         fi
 
-        if [[ "$line" =~ ^\[Peer\] ]]; then
-            # Peek ahead: is this our target peer?
-            # We'll decide when we hit PublicKey
-            buffer+=("$line")
-            skip=0
+        # New section header
+        if [[ "$line" =~ ^\[ ]]; then
+            if (( skip == 1 )); then
+                # Previous peer was the target — stop skipping.
+                # buffer was cleared when we set skip=1, so just reset.
+                skip=0
+            fi
+
+            if [[ "$line" =~ ^\[Peer\] ]]; then
+                # Flush preceding buffer (blank lines / comments between peers)
+                # then hold [Peer] itself in buffer until we know its key.
+                for buffered in "${buffer[@]}"; do
+                    echo "$buffered" >> "$tmpfile"
+                done
+                buffer=("$line")
+            else
+                # [Interface] or other section — flush buffer and write
+                for buffered in "${buffer[@]}"; do
+                    echo "$buffered" >> "$tmpfile"
+                done
+                buffer=()
+                echo "$line" >> "$tmpfile"
+            fi
             continue
         fi
 
+        # PublicKey line — decide whether this peer is the target
         if [[ "$line" =~ ^PublicKey[[:space:]]*=[[:space:]]*(.*) ]]; then
             local key="${BASH_REMATCH[1]// /}"
             if [[ "$key" == "$pubkey" ]]; then
+                # This is the peer to delete — discard buffer ([Peer] + comments)
                 skip=1
-                buffer=()   # discard buffered comments + [Peer] header
+                buffer=()
                 continue
             else
-                # Flush buffer — this peer stays
+                # Keep this peer — flush buffer then write PublicKey
                 for buffered in "${buffer[@]}"; do
                     echo "$buffered" >> "$tmpfile"
                 done
@@ -226,19 +265,9 @@ _remove_peer_from_conf() {
             fi
         fi
 
+        # All other key=value lines
         if (( skip == 1 )); then
-            # Skip all lines belonging to this peer until next blank or section
-            if [[ "$line" =~ ^\[ ]]; then
-                skip=0
-                # This is a new section — flush and keep
-                for buffered in "${buffer[@]}"; do
-                    echo "$buffered" >> "$tmpfile"
-                done
-                buffer=()
-                echo "$line" >> "$tmpfile"
-            fi
-            # else: skip the line
-            continue
+            continue  # discard lines belonging to target peer
         fi
 
         # Flush any buffered lines, then write current line
@@ -250,7 +279,7 @@ _remove_peer_from_conf() {
 
     done < "$conf_file"
 
-    # Flush remaining buffer (only if not skipping)
+    # Flush remaining buffer only if we are not still skipping
     if (( skip == 0 )); then
         for buffered in "${buffer[@]}"; do
             echo "$buffered" >> "$tmpfile"
@@ -259,105 +288,4 @@ _remove_peer_from_conf() {
 
     mv "$tmpfile" "$conf_file"
     chmod 600 "$conf_file"
-}
-
-# --- Wrapper called from menu with pre-selected server ----------------------
-
-client_delete_for() {
-    local iface="$1"
-    # Inject iface directly — reuse main logic skipping server selection
-    _client_delete_on "$iface"
-}
-
-_client_delete_on() {
-    local iface="$1"
-    local conf_file
-    conf_file="$(conf_path "$iface")"
-
-    if [[ ! -f "$conf_file" ]] || ! grep -q '^\[Peer\]' "$conf_file" 2>/dev/null; then
-        warn "No clients on '${iface}'."
-        pause
-        return 0
-    fi
-
-    local -a client_names client_pubkeys client_ips
-    local cur_name="" cur_pubkey="" cur_ip=""
-
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^\[Peer\] ]]; then
-            if [[ -n "$cur_pubkey" ]]; then
-                client_names+=("${cur_name:-unnamed}")
-                client_pubkeys+=("$cur_pubkey")
-                client_ips+=("${cur_ip:--}")
-            fi
-            cur_name=""; cur_pubkey=""; cur_ip=""
-        elif [[ "$line" =~ ^#[[:space:]]Name[[:space:]]*=[[:space:]]*(.*) ]]; then
-            cur_name="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^PublicKey[[:space:]]*=[[:space:]]*(.*) ]]; then
-            cur_pubkey="${BASH_REMATCH[1]// /}"
-        elif [[ "$line" =~ ^AllowedIPs[[:space:]]*=[[:space:]]*(.*) ]]; then
-            cur_ip="${BASH_REMATCH[1]%%/*}"; cur_ip="${cur_ip// /}"
-        fi
-    done < "$conf_file"
-    [[ -n "$cur_pubkey" ]] && {
-        client_names+=("${cur_name:-unnamed}")
-        client_pubkeys+=("$cur_pubkey")
-        client_ips+=("${cur_ip:--}")
-    }
-
-    echo
-    echo "Clients on '${iface}':"
-    local i
-    for i in "${!client_names[@]}"; do
-        printf "  %d) %-20s  IP: %-16s  Key: %.16s…\n" \
-               $(( i + 1 )) "${client_names[$i]}" "${client_ips[$i]}" "${client_pubkeys[$i]}"
-    done
-    echo "  0) Cancel"
-    echo
-
-    local cchoice
-    while true; do
-        read -rp "Select client to delete: " cchoice
-        [[ "$cchoice" == "0" ]] && { info "Cancelled."; return 0; }
-        if [[ "$cchoice" =~ ^[0-9]+$ ]] && (( cchoice >= 1 && cchoice <= ${#client_names[@]} )); then
-            break
-        fi
-        warn "Invalid selection."
-    done
-
-    local del_idx=$(( cchoice - 1 ))
-    local del_name="${client_names[$del_idx]}"
-    local del_pubkey="${client_pubkeys[$del_idx]}"
-    local del_ip="${client_ips[$del_idx]}"
-
-    echo
-    echo -e "${RED}  !! Removing: ${del_name} (${del_ip}) !!${NC}"
-    read -rp "Type client name to confirm (${del_name}): " confirm_name
-    [[ "$confirm_name" != "$del_name" ]] && { warn "Name mismatch. Cancelled."; pause; return 0; }
-
-    _remove_peer_from_conf "$conf_file" "$del_pubkey"
-    ok "Peer removed from ${conf_file}."
-
-    [[ "$del_ip" != "-" ]] && pool_release "$iface" "$del_ip" 2>/dev/null
-
-    local env_file keydir
-    env_file="$(env_path "$iface")"
-    keydir="$(env_get "$env_file" WG_KEY_DIR)"
-    local client_dir="${keydir}/clients/${del_name}"
-    if [[ -d "$client_dir" ]]; then
-        read -rp "Delete client files (${client_dir}/)? [Y/n]: " df_ans; df_ans="${df_ans:-Y}"
-        [[ "${df_ans,,}" == "y" ]] && { rm -rf "$client_dir"; ok "Removed: ${client_dir}/"; }
-    fi
-
-    local backend; backend="$(backend_for_iface "$iface")"
-    local bin; bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
-    if backend_is_up "$iface"; then
-        "$bin" set "$iface" peer "$del_pubkey" remove 2>/dev/null && \
-            ok "Peer removed from live interface." || \
-            warn "Live removal failed — restart to apply."
-    fi
-
-    echo
-    ok "Client '${del_name}' deleted from '${iface}'."
-    pause
 }

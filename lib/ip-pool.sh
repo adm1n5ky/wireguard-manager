@@ -5,7 +5,7 @@
 # Pool state is tracked in: ${WG_CONFIG_DIR}/server-${iface}/ip-pool.dat
 # Format (one entry per line):
 #   <ip>  <status>  <client_name>  <allocated_at>
-#   status: free | used
+#   status: free | used | server
 # =============================================================================
 
 _pool_file() {
@@ -15,9 +15,6 @@ _pool_file() {
     keydir="${keydir:-${WG_CONFIG_DIR}/server-${iface}}"
     echo "${keydir}/ip-pool.dat"
 }
-
-# --- Build pool from scratch -------------------------------------------------
-# Enumerates all usable host IPs in the subnet, marks used ones from .conf
 
 pool_init() {
     local iface="$1"
@@ -29,7 +26,7 @@ pool_init() {
     local network server_ip
     network="$(env_get "$env_file" WG_NETWORK)"
     server_ip="$(env_get "$env_file" WG_SERVER_IP)"
-    server_ip="${server_ip%%/*}"   # strip prefix
+    server_ip="${server_ip%%/*}"
 
     if [[ -z "$network" ]]; then
         warn "No WG_NETWORK in ${env_file}"
@@ -44,9 +41,7 @@ pool_init() {
     base_int="$(ip_to_int "$base")"
 
     local total_hosts=$(( (1 << (32 - prefix)) - 2 ))
-    # Usable: .1 through .(total_hosts) — skip network (.0) and broadcast (.255+)
 
-    # Collect already-used IPs from [Peer] AllowedIPs
     declare -A used_ips
     used_ips["$server_ip"]=server
 
@@ -65,7 +60,6 @@ pool_init() {
         done < "$conf_file"
     fi
 
-    # Write pool file
     local pool_dir
     pool_dir="$(dirname "$pool_file")"
     mkdir -p "$pool_dir"
@@ -91,9 +85,6 @@ pool_init() {
     chmod 600 "$pool_file"
     ok "Pool initialised: ${total_hosts} addresses for ${iface}"
 }
-
-# --- Allocate next free IP ---------------------------------------------------
-# Prints the allocated IP. Updates pool file. Returns 1 if pool exhausted.
 
 pool_allocate() {
     local iface="$1"
@@ -132,8 +123,6 @@ pool_allocate() {
     echo "$allocated_ip"
 }
 
-# --- Release an IP back to free ----------------------------------------------
-
 pool_release() {
     local iface="$1"
     local ip="$2"
@@ -169,8 +158,6 @@ pool_release() {
     ok "Released: ${ip}"
 }
 
-# --- Pool statistics ---------------------------------------------------------
-
 pool_stats() {
     local iface="$1"
     local pool_file
@@ -194,8 +181,6 @@ pool_stats() {
 
     echo "${total}/${used}/${free}"
 }
-
-# --- Show pool ---------------------------------------------------------------
 
 pool_show() {
     local iface="$1"

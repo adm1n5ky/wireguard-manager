@@ -2,33 +2,9 @@
 # =============================================================================
 # lib/backend.sh — WireGuard / AmneziaWG backend abstraction
 # =============================================================================
-#
-# Usage:
-#   Every call to wg / awg / wg-quick / awg-quick goes through this file.
-#   Callers use:
-#     backend_genkey
-#     backend_pubkey
-#     backend_genpsk
-#     backend_show      [iface]
-#     backend_up        <iface>
-#     backend_down      <iface>
-#     backend_enable    <iface>
-#     backend_disable   <iface>
-#     backend_start     <iface>
-#     backend_stop      <iface>
-#     backend_is_up     <iface>    → returns 0 if up
-#     backend_check     <backend>  → validate + check installed
-#     backend_detect                → prints "wg" or "awg" (first found)
-#     backend_for_iface <iface>    → reads WG_BACKEND from .env, prints it
-#
-# The active backend is resolved per-interface via WG_BACKEND in .env.
-# Falls back to "wg" if not set.
-# =============================================================================
-
-# --- Binary resolution -------------------------------------------------------
 
 _backend_bin() {
-    local backend="$1"   # "wg" or "awg"
+    local backend="$1"
     case "$backend" in
         wg)  echo "wg" ;;
         awg) echo "awg" ;;
@@ -55,8 +31,6 @@ _systemd_unit() {
     esac
 }
 
-# --- Backend detection -------------------------------------------------------
-
 backend_detect() {
     if command -v awg &>/dev/null; then
         echo "awg"
@@ -75,8 +49,6 @@ backend_for_iface() {
     b="$(env_get "$env_file" WG_BACKEND 2>/dev/null)"
     echo "${b:-wg}"
 }
-
-# --- Installation check ------------------------------------------------------
 
 backend_check() {
     local backend="${1:-wg}"
@@ -98,8 +70,6 @@ backend_check() {
     return 0
 }
 
-# --- Key operations ----------------------------------------------------------
-
 backend_genkey() {
     local backend="${1:-wg}"
     "$(_backend_bin "$backend")" genkey
@@ -115,8 +85,6 @@ backend_genpsk() {
     "$(_backend_bin "$backend")" genpsk
 }
 
-# --- wg show -----------------------------------------------------------------
-
 backend_show() {
     local iface="$1"
     local backend
@@ -124,14 +92,10 @@ backend_show() {
     "$(_backend_bin "$backend")" show "$iface"
 }
 
-# --- Interface state ---------------------------------------------------------
-
 backend_is_up() {
     local iface="$1"
     ip link show "$iface" &>/dev/null
 }
-
-# --- systemd control ---------------------------------------------------------
 
 backend_enable() {
     local iface="$1"
@@ -168,8 +132,6 @@ backend_is_enabled() {
     systemctl is-enabled "$(_systemd_unit "$backend" "$iface")" &>/dev/null
 }
 
-# --- wg-quick / awg-quick ----------------------------------------------------
-
 backend_up() {
     local iface="$1"
     local backend
@@ -183,9 +145,6 @@ backend_down() {
     backend="$(backend_for_iface "$iface")"
     "$(_quick_bin "$backend")" down "$iface"
 }
-
-# --- Prompt: choose backend --------------------------------------------------
-# Prints chosen backend ("wg" or "awg"). Returns 1 on cancel.
 
 prompt_backend() {
     echo >&2

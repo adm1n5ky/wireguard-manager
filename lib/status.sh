@@ -3,8 +3,6 @@
 # lib/status.sh — Interface status, up/down management
 # =============================================================================
 
-# --- Pick an instance interactively ------------------------------------------
-
 _pick_instance() {
     local prompt="${1:-Select instance}"
 
@@ -40,8 +38,6 @@ _pick_instance() {
         warn "Invalid selection."
     done
 }
-
-# --- Detailed status ---------------------------------------------------------
 
 server_status() {
     echo
@@ -82,8 +78,6 @@ server_status() {
     pause
 }
 
-# --- Bring interface UP -------------------------------------------------------
-
 server_up() {
     echo
     echo -e "${CYAN}── Start Interface ──${NC}"
@@ -115,8 +109,6 @@ server_up() {
 
     pause
 }
-
-# --- Bring interface DOWN -----------------------------------------------------
 
 server_down() {
     echo

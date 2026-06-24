@@ -6,17 +6,21 @@
 REQUIRED_PACKAGES_WG=(wireguard-tools ipcalc curl)
 OPTIONAL_PACKAGES=(qrencode)
 
-# Modules expected to be present in LIB_DIR
+# FIX: complete list of all modules used by wg-manager.sh
 EXPECTED_MODULES=(
-    common.sh
     backend.sh
+    common.sh
     validation.sh
     network.sh
     ports.sh
     endpoint.sh
+    ip-pool.sh
+    table.sh
     config-list.sh
     server-create.sh
     server-delete.sh
+    client-create.sh
+    client-delete.sh
     status.sh
     system.sh
     menu.sh

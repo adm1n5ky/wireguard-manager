@@ -6,13 +6,10 @@
 IPIFY_URL="https://api.ipify.org"
 CURL_TIMEOUT=5
 
-# --- Detect public IPv4 ------------------------------------------------------
-
 detect_public_ip() {
     local ip
     ip="$(curl -4 -s --max-time "${CURL_TIMEOUT}" "${IPIFY_URL}" 2>/dev/null)"
 
-    # Basic sanity check: looks like an IPv4?
     if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
         echo "$ip"
         return 0
@@ -21,20 +18,14 @@ detect_public_ip() {
     return 1
 }
 
-# --- Validate endpoint (IP or hostname) --------------------------------------
-
 validate_endpoint() {
     local ep="$1"
-
-    # Remove port if provided (host:port)
     local host="${ep%%:*}"
 
-    # Could be IPv4
     if [[ "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
         return 0
     fi
 
-    # Could be a hostname / domain
     if [[ "$host" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
         return 0
     fi
@@ -42,8 +33,6 @@ validate_endpoint() {
     echo "Not a valid IP address or hostname."
     return 1
 }
-
-# --- Prompt for endpoint -----------------------------------------------------
 
 prompt_endpoint() {
     local detected

@@ -3,8 +3,6 @@
 # lib/network.sh — IP math, subnet overlap detection, conflict checking
 # =============================================================================
 
-# --- IP ↔ integer conversion -------------------------------------------------
-
 ip_to_int() {
     local ip="$1"
     local a b c d
@@ -17,7 +15,6 @@ int_to_ip() {
     echo "$(( (n >> 24) & 255 )).$(( (n >> 16) & 255 )).$(( (n >> 8) & 255 )).$(( n & 255 ))"
 }
 
-# Convert prefix length to 32-bit mask integer
 prefix_to_mask_int() {
     local prefix="$1"
     if (( prefix == 0 )); then
@@ -27,12 +24,9 @@ prefix_to_mask_int() {
     fi
 }
 
-# --- Network overlap detection -----------------------------------------------
-# Returns 0 (overlap found) or 1 (no overlap)
-
 network_overlap() {
-    local net1="$1"   # e.g. 10.0.0.0/24
-    local net2="$2"   # e.g. 10.0.0.128/25
+    local net1="$1"
+    local net2="$2"
 
     local ip1 prefix1 ip2 prefix2
     ip1="${net1%/*}";  prefix1="${net1#*/}"
@@ -46,7 +40,6 @@ network_overlap() {
     mask1="$(prefix_to_mask_int "$prefix1")"
     mask2="$(prefix_to_mask_int "$prefix2")"
 
-    # Shorter mask wins (covers larger space)
     local common_mask
     if (( mask1 < mask2 )); then
         common_mask="$mask1"
@@ -63,9 +56,6 @@ network_overlap() {
     return 1       # no overlap
 }
 
-# --- Derive server IP from network CIDR --------------------------------------
-# 10.100.100.0/24 → 10.100.100.1/24
-
 network_to_server_ip() {
     local cidr="$1"
     local ip prefix
@@ -78,9 +68,6 @@ network_to_server_ip() {
 
     echo "$(int_to_ip "$int")/${prefix}"
 }
-
-# --- Check new network against all existing .env files ----------------------
-# Prints the conflicting network+name if found, returns 0 on conflict.
 
 network_conflicts() {
     local new_cidr="$1"

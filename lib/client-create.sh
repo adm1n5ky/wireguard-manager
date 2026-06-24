@@ -100,8 +100,7 @@ client_create() {
     echo "  2) Split tunnel     (VPN subnet only)"
     echo "  3) Custom"
     echo
-    local allowed_ips
-    local rchoice
+    local allowed_ips rchoice
     read -rp "Routing [1]: " rchoice
     rchoice="${rchoice:-1}"
 
@@ -125,7 +124,7 @@ client_create() {
     local c2c="$c2c_default"
     echo
     echo -e "${CYAN}── Step 4: Client-to-Client ──${NC}"
-    local c2c_prompt="n/N"
+    local c2c_prompt="y/N"
     [[ "$c2c_default" == "yes" ]] && c2c_prompt="Y/n"
     read -rp "Allow this client to reach other clients? [${c2c_prompt}]: " c2c_ans
     if [[ -n "$c2c_ans" ]]; then
@@ -146,7 +145,6 @@ client_create() {
     # ── Allocate IP ───────────────────────────────────────────────────────────
     info "Allocating IP from pool..."
 
-    # Init pool if not yet done
     local pool_file
     pool_file="$(_pool_file "$iface")"
     if [[ ! -f "$pool_file" ]]; then
@@ -212,21 +210,17 @@ client_create() {
     ok "Client config written."
 
     # ── Append [Peer] to server .conf ────────────────────────────────────────
+    # NOTE: [Peer] header comes first so parsers find # Name inside the block,
+    #       not before it (parser resets cur_name on [Peer]).
     msg "Adding peer to server config: ${conf_file}"
     {
         echo ""
+        echo "[Peer]"
         echo "# Name = ${client_name}"
         echo "# Created: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-        echo "[Peer]"
         echo "PublicKey  = ${client_pub}"
         [[ -n "$psk" ]] && echo "PresharedKey = ${psk}"
-
-        if [[ "$c2c" == "yes" ]]; then
-            echo "AllowedIPs = ${client_ip}/32"
-        else
-            echo "AllowedIPs = ${client_ip}/32"
-        fi
-
+        echo "AllowedIPs = ${client_ip}/32"
         echo "# Client-to-client: ${c2c}"
     } >> "$conf_file"
     ok "Peer added to server config."
@@ -276,12 +270,10 @@ client_create() {
 
 client_create_for() {
     local iface="$1"
-    # Temporarily override instance selection by jumping straight to the logic
-    # Re-use client_create but pre-fill iface via env
     _client_create_on "$iface"
 }
 
-# Core creation logic (extracted so client_create and client_create_for share it)
+# Core creation logic (shared between client_create and client_create_for)
 _client_create_on() {
     local iface="$1"
 
@@ -388,11 +380,13 @@ _client_create_on() {
     } > "$c_conf_file"; chmod 600 "$c_conf_file"
     ok "Client config written: ${c_conf_file}"
 
+    # NOTE: [Peer] header comes first so parsers find # Name inside the block,
+    #       not before it (parser resets cur_name on [Peer]).
     {
         echo ""
+        echo "[Peer]"
         echo "# Name = ${client_name}"
         echo "# Created: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-        echo "[Peer]"
         echo "PublicKey  = ${client_pub}"
         [[ -n "$psk" ]] && echo "PresharedKey = ${psk}"
         echo "AllowedIPs = ${client_ip}/32"

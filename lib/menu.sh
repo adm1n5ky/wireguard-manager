@@ -55,7 +55,7 @@ _peers_summary() {
 
     local total="-" created=0 active="-"
 
-    # Total from IP pool (subnet size - 2: network + server)
+    # Total from IP pool (subnet size - 2: network + broadcast - 1: server)
     local network prefix
     network="$(env_get "$env_file" WG_NETWORK 2>/dev/null)"
     if [[ -n "$network" ]]; then
@@ -71,11 +71,13 @@ _peers_summary() {
         created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
     fi
 
-    # Active: peers with recent handshake (via wg show, if up)
-    if ip link show "$iface" &>/dev/null 2>&1; then
-        local backend
+    # Active: peers with recent handshake (via backend show, if up)
+    # FIX: use backend_for_iface instead of hardcoded "wg"
+    if backend_is_up "$iface" 2>/dev/null; then
+        local backend bin
         backend="$(backend_for_iface "$iface")"
-        active="$(wg show "$iface" latest-handshakes 2>/dev/null | \
+        bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
+        active="$("$bin" show "$iface" latest-handshakes 2>/dev/null | \
             awk -v t="$(date +%s)" '{if (t-$2 < 180 && $2>0) c++} END {print c+0}')"
     fi
 
@@ -126,7 +128,6 @@ menu_clients() {
         echo -e "  ${BOLD}Clients${NC}"
         echo
 
-        # Pick server first if called from main menu
         local instances
         mapfile -t instances < <(list_wg_instances)
 

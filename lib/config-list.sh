@@ -52,9 +52,12 @@ _peers_summary() {
         created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
     fi
 
+    # FIX: use backend_for_iface instead of hardcoded wg
     if backend_is_up "$iface" 2>/dev/null; then
-        active="$(backend_show "$iface" 2>/dev/null | \
-            grep "latest handshake" | \
+        local backend bin
+        backend="$(backend_for_iface "$iface")"
+        bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
+        active="$("$bin" show "$iface" latest-handshakes 2>/dev/null | \
             awk -v now="$(date +%s)" '{
                 for(i=1;i<=NF;i++) if($i~/^[0-9]+$/ && $i>1000000){if(now-$i<180)c++;break}
             } END{print c+0}')"
@@ -72,8 +75,6 @@ _state_colour() {
     esac
 }
 
-# --- Main listing (with pause) -----------------------------------------------
-
 config_list() {
     echo
     table_header
@@ -82,8 +83,6 @@ config_list() {
     pause
 }
 
-# --- Compact listing for menus (no pause) ------------------------------------
-
 config_list_inline() {
     echo
     table_header
@@ -91,13 +90,10 @@ config_list_inline() {
     table_footer
 }
 
-# --- Shared row rendering ----------------------------------------------------
-
 _table_rows() {
     local found=0
     declare -A seen
 
-    # Managed instances (.env present)
     for env_file in "${WG_CONFIG_DIR}"/*.env; do
         [[ -f "$env_file" ]] || continue
         local name network port backend
@@ -120,7 +116,6 @@ _table_rows() {
                   "$(_state_colour "$state")" "${GREEN}yes${NC}"
     done
 
-    # Unmanaged .conf files (no .env)
     for conf_file in "${WG_CONFIG_DIR}"/*.conf; do
         [[ -f "$conf_file" ]] || continue
         local name; name="$(basename "$conf_file" .conf)"
