@@ -21,6 +21,7 @@ EXPECTED_MODULES=(
     server-delete.sh
     client-create.sh
     client-delete.sh
+    client-show.sh
     status.sh
     system.sh
     menu.sh
