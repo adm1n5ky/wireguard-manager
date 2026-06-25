@@ -46,6 +46,42 @@ _servers_list_compact() {
     config_list_inline
 }
 
+# Count peers: total_in_pool / created_in_conf / active_handshake
+_peers_summary() {
+    local iface="$1"
+    local env_file conf_file
+    env_file="$(env_path "$iface")"
+    conf_file="$(conf_path "$iface")"
+
+    local total="-" created=0 active="-"
+
+    # Total from IP pool (subnet size - 2: network + server)
+    local network prefix
+    network="$(env_get "$env_file" WG_NETWORK 2>/dev/null)"
+    if [[ -n "$network" ]]; then
+        prefix="${network#*/}"
+        if [[ "$prefix" =~ ^[0-9]+$ ]] && (( prefix <= 30 )); then
+            local hosts=$(( (1 << (32 - prefix)) - 2 ))
+            total=$(( hosts - 1 ))   # subtract server itself
+        fi
+    fi
+
+    # Created: count [Peer] sections in conf
+    if [[ -f "$conf_file" ]]; then
+        created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
+    fi
+
+    # Active: peers with recent handshake (via wg show, if up)
+    if ip link show "$iface" &>/dev/null 2>&1; then
+        local backend
+        backend="$(backend_for_iface "$iface")"
+        active="$(wg show "$iface" latest-handshakes 2>/dev/null | \
+            awk -v t="$(date +%s)" '{if (t-$2 < 180 && $2>0) c++} END {print c+0}')"
+    fi
+
+    echo "${total}/${created}/${active}"
+}
+
 menu_servers() {
     while true; do
         _print_header
@@ -58,13 +94,13 @@ menu_servers() {
         echo "  2) Delete server"
         echo "  3) Start interface"
         echo "  4) Stop interface"
-        echo "  5) Peer Monitor"
+        echo "  5) Interface status"
         echo "  6) Manage clients →"
         echo
         echo "  0) Back to main menu"
         echo
 
-        read -rp "  Choice: " choice
+        read -rep "  Choice: " choice
         echo
 
         case "$choice" in
@@ -72,7 +108,7 @@ menu_servers() {
             2) server_delete ;;
             3) server_up ;;
             4) server_down ;;
-            5) peer_monitor ;;
+            5) server_status ;;
             6) menu_clients ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
@@ -90,6 +126,7 @@ menu_clients() {
         echo -e "  ${BOLD}Clients${NC}"
         echo
 
+        # Pick server first if called from main menu
         local instances
         mapfile -t instances < <(list_wg_instances)
 
@@ -114,7 +151,7 @@ menu_clients() {
         echo
 
         local schoice
-        read -rp "  Server: " schoice
+        read -rep "  Server: " schoice
         echo
 
         if [[ "$schoice" == "0" ]]; then
@@ -144,19 +181,20 @@ _menu_clients_for() {
         echo "  ─────────────────────────────────"
         echo "  1) Add client"
         echo "  2) Delete client"
-        echo "  3) Show QR code        [roadmap]"
+        echo "  3) Show QR code"
         echo "  4) SSH push config     [roadmap]"
         echo
         echo "  0) Back"
         echo
 
-        read -rp "  Choice: " choice
+        read -rep "  Choice: " choice
         echo
 
         case "$choice" in
             1) client_create_for "$iface" ;;
             2) client_delete_for "$iface" ;;
-            3|4)
+            3) client_show_qr "$iface" ;;
+            4)
                 warn "Not implemented yet — coming in roadmap."
                 sleep 1
                 ;;
@@ -212,6 +250,101 @@ _clients_list_compact() {
 }
 
 # =============================================================================
+# QR code display
+# =============================================================================
+
+client_show_qr() {
+    local iface="$1"
+
+    echo
+    echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║   Show QR Code                       ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
+    echo
+
+    if ! command -v qrencode &>/dev/null; then
+        warn "qrencode not installed. Install it with: apt-get install qrencode"
+        pause
+        return 0
+    fi
+
+    local env_file keydir
+    env_file="$(env_path "$iface")"
+    keydir="$(env_get "$env_file" WG_KEY_DIR)"
+
+    # Build list of clients from conf
+    local conf_file
+    conf_file="$(conf_path "$iface")"
+
+    if [[ ! -f "$conf_file" ]] || ! grep -q '^\[Peer\]' "$conf_file" 2>/dev/null; then
+        warn "No clients on '${iface}'."
+        pause
+        return 0
+    fi
+
+    local -a client_names client_ips
+    local cur_name="" cur_ip=""
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\[Peer\] ]]; then
+            if [[ -n "$cur_name" ]]; then
+                client_names+=("$cur_name")
+                client_ips+=("${cur_ip:--}")
+            fi
+            cur_name=""; cur_ip=""
+        elif [[ "$line" =~ ^#[[:space:]]Name[[:space:]]*=[[:space:]]*(.*) ]]; then
+            cur_name="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^AllowedIPs[[:space:]]*=[[:space:]]*(.*) ]]; then
+            cur_ip="${BASH_REMATCH[1]%%/*}"; cur_ip="${cur_ip// /}"
+        fi
+    done < "$conf_file"
+    [[ -n "$cur_name" ]] && { client_names+=("$cur_name"); client_ips+=("${cur_ip:--}"); }
+
+    if [[ ${#client_names[@]} -eq 0 ]]; then
+        warn "No named clients found on '${iface}'."
+        pause
+        return 0
+    fi
+
+    echo "Select client:"
+    local i
+    for i in "${!client_names[@]}"; do
+        printf "  %d) %-20s  IP: %s\n" $(( i + 1 )) "${client_names[$i]}" "${client_ips[$i]}"
+    done
+    echo "  0) Cancel"
+    echo
+
+    local cchoice
+    while true; do
+        read -rep "Client: " cchoice
+        [[ "$cchoice" == "0" ]] && { info "Cancelled."; return 0; }
+        if [[ "$cchoice" =~ ^[0-9]+$ ]] && (( cchoice >= 1 && cchoice <= ${#client_names[@]} )); then
+            break
+        fi
+        warn "Invalid selection."
+    done
+
+    local sel_name="${client_names[$(( cchoice - 1 ))]}"
+    local client_dir="${keydir}/clients/${sel_name}"
+    local c_conf_file="${client_dir}/${iface}-${sel_name}.conf"
+
+    if [[ ! -f "$c_conf_file" ]]; then
+        warn "Config file not found: ${c_conf_file}"
+        pause
+        return 0
+    fi
+
+    echo
+    info "Client: ${BOLD}${sel_name}${NC}"
+    info "Config: ${c_conf_file}"
+    echo
+    qrencode -t ansiutf8 < "$c_conf_file"
+    echo
+
+    pause
+}
+
+# =============================================================================
 # SUBMENU: System
 # =============================================================================
 
@@ -232,7 +365,7 @@ menu_system() {
         echo "  0) Back to main menu"
         echo
 
-        read -rp "  Choice: " choice
+        read -rep "  Choice: " choice
         echo
 
         case "$choice" in
@@ -263,7 +396,7 @@ main_menu() {
         echo "  0) Exit"
         echo
 
-        read -rp "  Choice: " choice
+        read -rep "  Choice: " choice
         echo
 
         case "$choice" in
