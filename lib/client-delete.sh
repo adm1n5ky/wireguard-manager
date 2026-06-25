@@ -176,13 +176,20 @@ _client_delete_on() {
     local backend
     backend="$(backend_for_iface "$iface")"
     if backend_is_up "$iface"; then
-        msg "Removing peer live (wg set)..."
+        msg "Removing peer live..."
         local bin
         bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
         if "$bin" set "$iface" peer "$del_pubkey" remove 2>/dev/null; then
             ok "Peer removed from live interface."
         else
-            warn "Could not remove peer live. Restart to apply: systemctl restart $(_systemd_unit "$backend" "$iface")"
+            warn "Live removal failed — reloading service..."
+            local unit
+            unit="$(_systemd_unit "$backend" "$iface")"
+            if systemctl reload-or-restart "$unit" 2>/dev/null; then
+                ok "Service reloaded."
+            else
+                warn "Reload failed. Restart manually: systemctl restart ${unit}"
+            fi
         fi
     else
         info "Interface is down — changes apply on next start."

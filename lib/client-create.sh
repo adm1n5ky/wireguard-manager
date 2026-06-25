@@ -227,13 +227,21 @@ client_create() {
 
     # ── Hot-reload if interface is up ─────────────────────────────────────────
     if backend_is_up "$iface"; then
-        msg "Applying peer without restart (wg syncconf)..."
-        local bin
+        msg "Applying peer live..."
+        local bin quick_bin
         bin="$(  [[ "$backend" == "awg" ]] && echo "awg" || echo "wg"  )"
-        if "$bin" syncconf "$iface" <(grep -v "^PrivateKey" "$conf_file"); then
+        quick_bin="$( [[ "$backend" == "awg" ]] && echo "awg-quick" || echo "wg-quick" )"
+        if "$bin" syncconf "$iface" <("$quick_bin" strip "$iface" 2>/dev/null) 2>/dev/null; then
             ok "Peer applied live."
         else
-            warn "syncconf failed — restart the interface to apply: systemctl restart $(_systemd_unit "$backend" "$iface")"
+            warn "Live sync failed — reloading service..."
+            local unit
+            unit="$(_systemd_unit "$backend" "$iface")"
+            if systemctl reload-or-restart "$unit" 2>/dev/null; then
+                ok "Service reloaded."
+            else
+                warn "Reload failed. Restart manually: systemctl restart ${unit}"
+            fi
         fi
     else
         info "Interface is down — peer will be active on next start."
@@ -396,11 +404,20 @@ _client_create_on() {
 
     local bin; bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
     if backend_is_up "$iface"; then
-        msg "Applying peer live (syncconf)..."
-        if "$bin" syncconf "$iface" <(grep -v "^PrivateKey" "$conf_file") 2>/dev/null; then
+        msg "Applying peer live..."
+        local quick_bin
+        quick_bin="$( [[ "$backend" == "awg" ]] && echo "awg-quick" || echo "wg-quick" )"
+        if "$bin" syncconf "$iface" <("$quick_bin" strip "$iface" 2>/dev/null) 2>/dev/null; then
             ok "Peer applied live."
         else
-            warn "syncconf failed — restart to apply: systemctl restart $(_systemd_unit "$backend" "$iface")"
+            warn "Live sync failed — reloading service..."
+            local unit
+            unit="$(_systemd_unit "$backend" "$iface")"
+            if systemctl reload-or-restart "$unit" 2>/dev/null; then
+                ok "Service reloaded."
+            else
+                warn "Reload failed. Restart manually: systemctl restart ${unit}"
+            fi
         fi
     fi
 
