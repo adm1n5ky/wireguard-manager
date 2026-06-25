@@ -56,7 +56,8 @@ server_delete() {
 
     local peer_count=0
     if [[ -f "$conf_file" ]]; then
-        peer_count="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
+        peer_count="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null)"
+        peer_count="${peer_count:-0}"
     fi
 
     echo
