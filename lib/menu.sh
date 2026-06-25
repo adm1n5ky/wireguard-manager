@@ -46,43 +46,6 @@ _servers_list_compact() {
     config_list_inline
 }
 
-# Count peers: total_in_pool / created_in_conf / active_handshake
-_peers_summary() {
-    local iface="$1"
-    local env_file conf_file
-    env_file="$(env_path "$iface")"
-    conf_file="$(conf_path "$iface")"
-
-    local total="-" created=0 active="-"
-
-    # Total from IP pool (subnet size - 2: network + broadcast - 1: server)
-    local network prefix
-    network="$(env_get "$env_file" WG_NETWORK 2>/dev/null)"
-    if [[ -n "$network" ]]; then
-        prefix="${network#*/}"
-        if [[ "$prefix" =~ ^[0-9]+$ ]] && (( prefix <= 30 )); then
-            local hosts=$(( (1 << (32 - prefix)) - 2 ))
-            total=$(( hosts - 1 ))   # subtract server itself
-        fi
-    fi
-
-    # Created: count [Peer] sections in conf
-    if [[ -f "$conf_file" ]]; then
-        created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
-    fi
-
-    # Active: peers with recent handshake (via backend show, if up)
-    # FIX: use backend_for_iface instead of hardcoded "wg"
-    if backend_is_up "$iface" 2>/dev/null; then
-        local backend bin
-        backend="$(backend_for_iface "$iface")"
-        bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
-        active="$("$bin" show "$iface" latest-handshakes 2>/dev/null | \
-            awk -v t="$(date +%s)" '{if (t-$2 < 180 && $2>0) c++} END {print c+0}')"
-    fi
-
-    echo "${total}/${created}/${active}"
-}
 
 menu_servers() {
     while true; do
@@ -182,7 +145,8 @@ _menu_clients_for() {
         echo "  ─────────────────────────────────"
         echo "  1) Add client"
         echo "  2) Delete client"
-        echo "  3) Show config & QR"
+        echo "  3) Show QR code        [roadmap]"
+        echo "  4) SSH push config     [roadmap]"
         echo
         echo "  0) Back"
         echo
@@ -193,7 +157,10 @@ _menu_clients_for() {
         case "$choice" in
             1) client_create_for "$iface" ;;
             2) client_delete_for "$iface" ;;
-            3) client_show_for "$iface" ;;
+            3|4)
+                warn "Not implemented yet — coming in roadmap."
+                sleep 1
+                ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
         esac

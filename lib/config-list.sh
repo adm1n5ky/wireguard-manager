@@ -52,7 +52,6 @@ _peers_summary() {
         created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
     fi
 
-    # FIX: use backend_for_iface instead of hardcoded wg
     if backend_is_up "$iface" 2>/dev/null; then
         local backend bin
         backend="$(backend_for_iface "$iface")"
@@ -61,6 +60,7 @@ _peers_summary() {
             awk -v now="$(date +%s)" '{
                 for(i=1;i<=NF;i++) if($i~/^[0-9]+$/ && $i>1000000){if(now-$i<180)c++;break}
             } END{print c+0}')"
+        active="${active:-0}"
     fi
 
     echo "${total}/${created}/${active}"
