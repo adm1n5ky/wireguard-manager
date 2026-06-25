@@ -137,26 +137,31 @@ _render_peer_table() {
         *)       state_label="$iface_state" ; state_col="$NC" ;;
     esac
 
-    # Рамка фиксированной ширины 72 символа (без пробелов слева)
-    local W=72
+    # Рамка — ширина фиксирована, считаем визуально (LC_ALL=C для ${#})
+    # Внутренняя ширина: W символов (без ╔ ╗ и двух пробелов отступа)
+    local W=74
     local border
     printf -v border '%*s' "$W" '' ; border="${border// /═}"
 
     echo -e "${BOLD}${CYAN}  ╔${border}╗${NC}"
 
-    # Строка заголовка без ANSI в printf-ширинах — собираем вручную
-    local title="Peer Monitor — ${iface}"
+    # Заголовок внутри рамки — все строки только ASCII+цифры, длины точные
+    # "Peer Monitor - wg100" + "  [UP]" + пробелы + "2026-06-25 09:50:21"
+    local title="Peer Monitor - ${iface}"      # ASCII дефис, не em-dash
     local state_plain="[${state_label}]"
-    # Паддинг между title и datetime: W-2 (внутренняя ширина) - длины строк - разделители
+    local right="$now_fmt"                      # 19 символов всегда
+
+    # Визуальная длина строки внутри рамки: W (═══) = контент + 2 пробела по краям
+    # ║ + space + title + "  " + state_plain + pad + right + space + ║
+    # inner = W - 2 (два пробела: после ║ и перед ║)
     local inner=$(( W - 2 ))
-    local left="${title}  ${state_plain}"
-    local right="${now_fmt}"
-    local pad=$(( inner - ${#left} - ${#right} ))
+    local left_len=$(( ${#title} + 2 + ${#state_plain} ))  # title + "  " + [UP]
+    local pad=$(( inner - left_len - ${#right} ))
     (( pad < 1 )) && pad=1
     local spaces
     printf -v spaces '%*s' "$pad" ''
 
-    printf "  ${BOLD}${CYAN}║${NC} ${BOLD}%s${NC}  ${state_col}%s${NC}%s${CYAN}%s${NC}  ${BOLD}${CYAN}║${NC}\n" \
+    printf "  ${BOLD}${CYAN}║${NC} ${BOLD}%s${NC}  ${state_col}%s${NC}%s%s  ${BOLD}${CYAN}║${NC}\n" \
            "$title" "$state_plain" "$spaces" "$right"
 
     echo -e "${BOLD}${CYAN}  ╚${border}╝${NC}"
@@ -189,8 +194,8 @@ _render_peer_table() {
 
     # ── Заголовок таблицы ─────────────────────────────────────────────────────
     # Колонки: №(3) NAME(20) ENDPOINT(25) LAST SEEN(11) RX(11) TX(11) STATUS(10)
-    printf "  ${BOLD}%-3s  %-20s  %-25s  %-16s  %-16s  %-16s  %-10s${NC}\n" \
-           "#" "NAME" "ENDPOINT" "LAST SEEN" "↓ RX" "↑ TX" "STATUS"
+    printf "  ${BOLD}%-3s  %-20s  %-25s  %-11s  %-11s  %-11s  %-10s${NC}\n" \
+           "#" "NAME" "ENDPOINT" "LAST SEEN" "RX" "TX" "STATUS"
     echo   "  ────────────────────────────────────────────────────────────────────────────────"
 
     # ── Строки ────────────────────────────────────────────────────────────────
@@ -235,7 +240,7 @@ _render_peer_table() {
         esac
 
         # Печатаем строку: фиксированные поля без ANSI внутри %-форматов
-        printf "  %-3d  %-20s  %-25s  %-16s  %-16s  %-16s  " \
+        printf "  %-3d  %-20s  %-25s  %-11s  %-11s  %-11s  " \
                "$idx" \
                "${name:0:20}" \
                "${endpoint:0:25}" \
