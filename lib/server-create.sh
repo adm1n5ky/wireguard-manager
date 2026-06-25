@@ -12,9 +12,10 @@ server_create() {
     echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
     echo
 
+    # ── Step 1: Backend ───────────────────────────────────────────────────────
     echo -e "${CYAN}── Step 1: Backend ──${NC}"
     local backend
-    backend="$(prompt_backend)" || return 1
+    prompt_backend backend || return 1
 
     if ! backend_check "$backend"; then
         warn "Backend '${backend}' is not properly installed."
@@ -22,18 +23,21 @@ server_create() {
         return 1
     fi
 
+    # ── Step 2: Interface name ────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 2: Interface Name ──${NC}"
     local iface
-    iface="$(prompt_iface_name)" || return 1
+    prompt_iface_name iface || return 1
 
+    # ── Step 3: Network CIDR ──────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 3: Network (CIDR) ──${NC}"
-    local cidr conflict
+    local cidr
 
     while true; do
-        cidr="$(prompt_cidr)" || return 1
+        prompt_cidr cidr || return 1
 
+        local conflict
         conflict="$(network_conflicts "$cidr")"
         if [[ $? -eq 0 ]]; then
             warn "Network ${cidr} overlaps with existing config: ${conflict}"
@@ -43,15 +47,18 @@ server_create() {
         fi
     done
 
+    # ── Step 4: Server IP (auto) ──────────────────────────────────────────────
     local server_ip
     server_ip="$(network_to_server_ip "$cidr")"
     info "Server address will be: ${BOLD}${server_ip}${NC}"
 
+    # ── Step 5: Listen port ───────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 4: Listen Port ──${NC}"
     local port
-    port="$(prompt_port)" || return 1
+    prompt_port port || return 1
 
+    # ── Step 6: MTU ───────────────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 5: MTU ──${NC}"
     local mtu err
@@ -67,6 +74,7 @@ server_create() {
         warn "$err"
     done
 
+    # ── Step 7: Key directory ─────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 6: Key Directory ──${NC}"
     local default_keydir
@@ -77,11 +85,13 @@ server_create() {
     keydir="${keydir:-$default_keydir}"
     keydir="${keydir%/}"
 
+    # ── Step 8: Endpoint ──────────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 7: Endpoint ──${NC}"
     local endpoint
-    endpoint="$(prompt_endpoint)" || return 1
+    prompt_endpoint endpoint || return 1
 
+    # ── Step 9: PSK mode ──────────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 8: Pre-shared Keys ──${NC}"
     local use_psk
@@ -93,7 +103,7 @@ server_create() {
         use_psk="no"
     fi
 
-
+    # ── Summary ───────────────────────────────────────────────────────────────
     echo
     echo -e "${BOLD}══════════════════════════════════════${NC}"
     echo -e "${BOLD}  Summary${NC}"
@@ -117,6 +127,7 @@ server_create() {
         return 0
     fi
 
+    # ── Generate keys ─────────────────────────────────────────────────────────
     msg "Creating key directory: ${keydir}"
     mkdir -p "$keydir"
     chmod 700 "$keydir"
@@ -136,6 +147,7 @@ server_create() {
     chmod 644 "$pub_file"
     ok "Keys generated."
 
+    # ── Write .conf ───────────────────────────────────────────────────────────
     local conf_file
     conf_file="$(conf_path "$iface")"
 
@@ -159,6 +171,7 @@ EOF
     chmod 600 "$conf_file"
     ok "Config written."
 
+    # ── Write .env ────────────────────────────────────────────────────────────
     local env_file
     env_file="$(env_path "$iface")"
     local created_at
@@ -185,12 +198,14 @@ EOF
     chmod 600 "$env_file"
     ok "Metadata written."
 
+    # ── Enable systemd service ────────────────────────────────────────────────
     local unit
     unit="$(_systemd_unit "$backend" "$iface")"
     msg "Enabling systemd service: ${unit}"
     backend_enable "$iface"
     ok "Service enabled (will start on next boot)."
 
+    # ── Offer to start the interface ──────────────────────────────────────────
     echo
     read -rp "Start interface now? [Y/n]: " start_now
     start_now="${start_now:-Y}"

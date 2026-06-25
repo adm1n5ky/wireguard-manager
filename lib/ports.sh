@@ -43,16 +43,18 @@ find_free_port() {
     return 1
 }
 
+# Usage: prompt_port VARNAME
 prompt_port() {
+    local -n _pp_out=$1
     local suggested
     suggested="$(find_free_port "$DEFAULT_PORT")" || suggested="$DEFAULT_PORT"
 
-    info "Scanning for available UDP ports..." >&2
+    info "Scanning for available UDP ports..."
 
     local port err
 
     while true; do
-        echo >&2
+        echo
         read -rp "Listen port [${suggested}]: " port
         port="${port:-$suggested}"
 
@@ -72,7 +74,7 @@ prompt_port() {
             continue
         fi
 
-        echo "$port"
+        _pp_out="$port"
         return 0
     done
 }

@@ -146,18 +146,21 @@ backend_down() {
     "$(_quick_bin "$backend")" down "$iface"
 }
 
+# Usage: prompt_backend VARNAME
 prompt_backend() {
-    echo >&2
-    info "Available backends:" >&2
+    local -n _pb_out=$1
+
+    echo
+    info "Available backends:"
     local opts=()
 
     if command -v wg &>/dev/null && command -v wg-quick &>/dev/null; then
         opts+=("wg")
-        echo "  1) WireGuard   (wg)" >&2
+        echo "  1) WireGuard   (wg)"
     fi
     if command -v awg &>/dev/null && command -v awg-quick &>/dev/null; then
         opts+=("awg")
-        echo "  ${#opts[@]}) AmneziaWG  (awg)" >&2
+        echo "  ${#opts[@]}) AmneziaWG  (awg)"
     fi
 
     if [[ ${#opts[@]} -eq 0 ]]; then
@@ -165,17 +168,17 @@ prompt_backend() {
     fi
 
     if [[ ${#opts[@]} -eq 1 ]]; then
-        info "Only one backend available: ${opts[0]}" >&2
-        echo "${opts[0]}"
+        info "Only one backend available: ${opts[0]}"
+        _pb_out="${opts[0]}"
         return 0
     fi
 
     local choice
     while true; do
-        read -rp "Select backend [1]: " choice >&2
+        read -rp "Select backend [1]: " choice
         choice="${choice:-1}"
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#opts[@]} )); then
-            echo "${opts[$(( choice - 1 ))]}"
+            _pb_out="${opts[$(( choice - 1 ))]}"
             return 0
         fi
         warn "Invalid selection."

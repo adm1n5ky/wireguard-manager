@@ -34,18 +34,20 @@ validate_endpoint() {
     return 1
 }
 
+# Usage: prompt_endpoint VARNAME
 prompt_endpoint() {
-    local detected
+    local -n _pe_out=$1
 
-    echo >&2
-    info "Detecting public IP address..." >&2
+    echo
+    info "Detecting public IP address..."
 
     local suggested=""
+    local detected
     if detected="$(detect_public_ip)"; then
         suggested="$detected"
-        info "Detected public IP: ${BOLD}${detected}${NC}" >&2
+        info "Detected public IP: ${BOLD}${detected}${NC}"
     else
-        warn "Could not auto-detect public IP. Please enter manually." >&2
+        warn "Could not auto-detect public IP. Please enter manually."
     fi
 
     local endpoint err
@@ -61,15 +63,15 @@ prompt_endpoint() {
         endpoint="${endpoint// /}"
 
         if [[ -z "$endpoint" ]]; then
-            warn "Endpoint cannot be empty." >&2
+            warn "Endpoint cannot be empty."
             continue
         fi
 
         err="$(validate_endpoint "$endpoint")"
         if [[ $? -eq 0 ]]; then
-            echo "$endpoint"
+            _pe_out="$endpoint"
             return 0
         fi
-        warn "$err" >&2
+        warn "$err"
     done
 }

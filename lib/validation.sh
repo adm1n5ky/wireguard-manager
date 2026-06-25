@@ -34,7 +34,9 @@ validate_iface_name() {
     return 0
 }
 
+# Usage: prompt_iface_name VARNAME
 prompt_iface_name() {
+    local -n _pif_out=$1
     local name err
 
     while true; do
@@ -48,7 +50,7 @@ prompt_iface_name() {
 
         err="$(validate_iface_name "$name")"
         if [[ $? -eq 0 ]]; then
-            echo "$name"
+            _pif_out="$name"
             return 0
         fi
         warn "$err"
@@ -87,12 +89,6 @@ validate_cidr() {
         return 1
     fi
 
-    if (( prefix >= 31 )); then
-        echo "Prefix /${prefix} is too small for a WireGuard network."
-        return 1
-    fi
-
-    # FIX: pure-bash host-bits check when ipcalc is unavailable
     if command -v ipcalc &>/dev/null; then
         local network
         network="$(ipcalc -n "$cidr" 2>/dev/null | grep -i '^Network:' | awk '{print $2}')"
@@ -101,7 +97,6 @@ validate_cidr() {
             return 1
         fi
     else
-        # Pure bash: verify host bits are zero
         local ip_int mask_int
         ip_int="$(ip_to_int "$ip")"
         mask_int="$(prefix_to_mask_int "$prefix")"
@@ -117,7 +112,9 @@ validate_cidr() {
     return 0
 }
 
+# Usage: prompt_cidr VARNAME
 prompt_cidr() {
+    local -n _pc_out=$1
     local cidr err
 
     while true; do
@@ -131,7 +128,7 @@ prompt_cidr() {
 
         err="$(validate_cidr "$cidr")"
         if [[ $? -eq 0 ]]; then
-            echo "$cidr"
+            _pc_out="$cidr"
             return 0
         fi
         warn "$err"
