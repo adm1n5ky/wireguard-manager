@@ -93,16 +93,6 @@ server_create() {
         use_psk="no"
     fi
 
-    echo
-    echo -e "${CYAN}── Step 9: Client-to-Client Traffic ──${NC}"
-    local c2c
-    read -rp "Allow client-to-client communication by default? [y/N]: " c2c
-    c2c="${c2c:-N}"
-    if [[ "${c2c,,}" == "y" ]]; then
-        c2c="yes"
-    else
-        c2c="no"
-    fi
 
     echo
     echo -e "${BOLD}══════════════════════════════════════${NC}"
@@ -117,7 +107,6 @@ server_create() {
     printf "  %-28s %s\n" "Key directory:"      "$keydir"
     printf "  %-28s %s\n" "Endpoint:"           "$endpoint"
     printf "  %-28s %s\n" "PSK per client:"     "$use_psk"
-    printf "  %-28s %s\n" "Client-to-client:"   "$c2c"
     echo -e "${BOLD}══════════════════════════════════════${NC}"
     echo
 
@@ -186,7 +175,6 @@ WG_PORT=${port}
 WG_MTU=${mtu}
 WG_ENDPOINT=${endpoint}
 WG_USE_PSK=${use_psk}
-WG_CLIENT_TO_CLIENT_DEFAULT=${c2c}
 WG_KEY_DIR=${keydir}
 WG_PRIVATE_KEY_FILE=${priv_file}
 WG_PUBLIC_KEY_FILE=${pub_file}

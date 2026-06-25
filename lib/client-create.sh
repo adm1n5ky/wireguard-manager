@@ -49,14 +49,13 @@ client_create() {
     env_file="$(env_path  "$iface")"
     conf_file="$(conf_path "$iface")"
 
-    local backend endpoint use_psk c2c_default
+    local backend endpoint use_psk
     backend="$(env_get    "$env_file" WG_BACKEND)"
     backend="${backend:-wg}"
     endpoint="$(env_get   "$env_file" WG_ENDPOINT)"
     local server_port
     server_port="$(env_get "$env_file" WG_PORT)"
     use_psk="$(env_get    "$env_file" WG_USE_PSK)"
-    c2c_default="$(env_get "$env_file" WG_CLIENT_TO_CLIENT_DEFAULT)"
     local server_pubkey mtu
     server_pubkey="$(env_get "$env_file" WG_SERVER_PUBLIC_KEY)"
     mtu="$(env_get "$env_file" WG_MTU)"
@@ -120,18 +119,7 @@ client_create() {
         *) allowed_ips="0.0.0.0/0, ::/0" ;;
     esac
 
-    # ── Step 4: Client-to-client override ────────────────────────────────────
-    local c2c="$c2c_default"
-    echo
-    echo -e "${CYAN}── Step 4: Client-to-Client ──${NC}"
-    local c2c_prompt="y/N"
-    [[ "$c2c_default" == "yes" ]] && c2c_prompt="Y/n"
-    read -rp "Allow this client to reach other clients? [${c2c_prompt}]: " c2c_ans
-    if [[ -n "$c2c_ans" ]]; then
-        [[ "${c2c_ans,,}" == "y" ]] && c2c="yes" || c2c="no"
-    fi
-
-    # ── Step 5: Output directory ──────────────────────────────────────────────
+    # ── Step 4: Output directory ──────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 5: Output ──${NC}"
     local keydir
@@ -221,7 +209,6 @@ client_create() {
         echo "PublicKey  = ${client_pub}"
         [[ -n "$psk" ]] && echo "PresharedKey = ${psk}"
         echo "AllowedIPs = ${client_ip}/32"
-        echo "# Client-to-client: ${c2c}"
     } >> "$conf_file"
     ok "Peer added to server config."
 
@@ -294,8 +281,6 @@ _client_create_on() {
     endpoint="$(env_get     "$env_file" WG_ENDPOINT)"
     server_port="$(env_get  "$env_file" WG_PORT)"
     use_psk="$(env_get      "$env_file" WG_USE_PSK)"
-    local c2c_default
-    c2c_default="$(env_get  "$env_file" WG_CLIENT_TO_CLIENT_DEFAULT)"
     server_pubkey="$(env_get "$env_file" WG_SERVER_PUBLIC_KEY)"
     mtu="$(env_get          "$env_file" WG_MTU)"; mtu="${mtu:-1420}"
     server_network="$(env_get "$env_file" WG_NETWORK)"
@@ -329,12 +314,6 @@ _client_create_on() {
         3) read -rp "AllowedIPs: " allowed_ips; allowed_ips="${allowed_ips:-0.0.0.0/0, ::/0}" ;;
         *) allowed_ips="0.0.0.0/0, ::/0" ;;
     esac
-
-    echo; echo -e "${CYAN}── Client-to-Client ──${NC}"
-    local c2c="$c2c_default"
-    local c2c_prompt="y/N"; [[ "$c2c_default" == "yes" ]] && c2c_prompt="Y/n"
-    read -rp "Allow client-to-client? [${c2c_prompt}]: " c2c_ans
-    [[ -n "$c2c_ans" ]] && { [[ "${c2c_ans,,}" == "y" ]] && c2c="yes" || c2c="no"; }
 
     echo; echo -e "${CYAN}── Output ──${NC}"
     local keydir; keydir="$(env_get "$env_file" WG_KEY_DIR)"
@@ -398,7 +377,6 @@ _client_create_on() {
         echo "PublicKey  = ${client_pub}"
         [[ -n "$psk" ]] && echo "PresharedKey = ${psk}"
         echo "AllowedIPs = ${client_ip}/32"
-        echo "# Client-to-client: ${c2c}"
     } >> "$conf_file"
     ok "Peer added to server config."
 
