@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/status.sh — Interface status, up/down management
+# lib/status.sh — Interface up/down management
 # =============================================================================
+
+# --- Pick an instance interactively ------------------------------------------
 
 _pick_instance() {
     local prompt="${1:-Select instance}"
@@ -39,44 +41,7 @@ _pick_instance() {
     done
 }
 
-server_status() {
-    echo
-    echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║   Interface Status                   ║${NC}"
-    echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
-    echo
-
-    local iface
-    iface="$(_pick_instance "Select interface")" || { pause; return 0; }
-
-    local backend
-    backend="$(backend_for_iface "$iface")"
-
-    echo
-    echo -e "${BOLD}── ip link ──────────────────────────────${NC}"
-    ip link show "$iface" 2>/dev/null || warn "Interface not found in kernel."
-
-    echo
-    echo -e "${BOLD}── ${backend} show ─────────────────────────────${NC}"
-    if backend_is_up "$iface"; then
-        backend_show "$iface" 2>/dev/null || warn "${backend} show failed."
-    else
-        warn "Interface '${iface}' is not up — nothing to show."
-    fi
-
-    echo
-    echo -e "${BOLD}── Metadata (.env) ──────────────────────${NC}"
-    local env_file
-    env_file="$(env_path "$iface")"
-    if [[ -f "$env_file" ]]; then
-        grep -v "PRIVATE_KEY" "$env_file" | grep -v "^#" | grep -v "^$" | \
-            sed 's/^/  /'
-    else
-        warn "No .env file found for ${iface}."
-    fi
-
-    pause
-}
+# --- Bring interface UP -------------------------------------------------------
 
 server_up() {
     echo
@@ -86,14 +51,12 @@ server_up() {
     local iface
     iface="$(_pick_instance "Select interface to start")" || { pause; return 0; }
 
-    if backend_is_up "$iface"; then
-        local state
-        state="$(_iface_state "$iface")"
-        if [[ "$state" == "UP" ]]; then
-            warn "Interface '${iface}' is already UP."
-            pause
-            return 0
-        fi
+    local state
+    state="$(_iface_state "$iface")"
+    if [[ "$state" == "UP" ]]; then
+        warn "Interface '${iface}' is already UP."
+        pause
+        return 0
     fi
 
     local backend unit
@@ -109,6 +72,8 @@ server_up() {
 
     pause
 }
+
+# --- Bring interface DOWN -----------------------------------------------------
 
 server_down() {
     echo

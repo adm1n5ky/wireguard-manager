@@ -46,45 +46,6 @@ _servers_list_compact() {
     config_list_inline
 }
 
-# Count peers: total_in_pool / created_in_conf / active_handshake
-_peers_summary() {
-    local iface="$1"
-    local env_file conf_file
-    env_file="$(env_path "$iface")"
-    conf_file="$(conf_path "$iface")"
-
-    local total="-" created=0 active="-"
-
-    # Total from IP pool (subnet size - 2: network + broadcast - 1: server)
-    local network prefix
-    network="$(env_get "$env_file" WG_NETWORK 2>/dev/null)"
-    if [[ -n "$network" ]]; then
-        prefix="${network#*/}"
-        if [[ "$prefix" =~ ^[0-9]+$ ]] && (( prefix <= 30 )); then
-            local hosts=$(( (1 << (32 - prefix)) - 2 ))
-            total=$(( hosts - 1 ))   # subtract server itself
-        fi
-    fi
-
-    # Created: count [Peer] sections in conf
-    if [[ -f "$conf_file" ]]; then
-        created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null)"
-        created="${created:-0}"
-    fi
-
-    # Active: peers with recent handshake (via backend show, if up)
-    # FIX: use backend_for_iface instead of hardcoded "wg"
-    if backend_is_up "$iface" 2>/dev/null; then
-        local backend bin
-        backend="$(backend_for_iface "$iface")"
-        bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
-        active="$("$bin" show "$iface" latest-handshakes 2>/dev/null | \
-            awk -v t="$(date +%s)" '{if (t-$2 < 180 && $2>0) c++} END {print c+0}')"
-    fi
-
-    echo "${total}/${created}/${active}"
-}
-
 menu_servers() {
     while true; do
         _print_header
@@ -97,7 +58,7 @@ menu_servers() {
         echo "  2) Delete server"
         echo "  3) Start interface"
         echo "  4) Stop interface"
-        echo "  5) Interface status"
+        echo "  5) Peer Monitor"
         echo "  6) Manage clients →"
         echo
         echo "  0) Back to main menu"
@@ -111,7 +72,7 @@ menu_servers() {
             2) server_delete ;;
             3) server_up ;;
             4) server_down ;;
-            5) server_status ;;
+            5) peer_monitor ;;
             6) menu_clients ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
