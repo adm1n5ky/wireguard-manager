@@ -29,7 +29,7 @@ _pick_instance() {
 
     local choice
     while true; do
-        read -rp "${prompt}: " choice
+        read -rep "${prompt}: " choice
         if [[ "$choice" == "0" ]]; then
             return 1
         fi
@@ -99,6 +99,63 @@ server_down() {
     else
         warn "Failed to stop. Check: journalctl -u ${unit} -n 30"
     fi
+
+    pause
+}
+# --- Show interface status ---------------------------------------------------
+
+server_status() {
+    echo
+    echo -e "${CYAN}── Interface Status ──${NC}"
+    echo
+
+    local instances
+    mapfile -t instances < <(list_wg_instances)
+
+    if [[ ${#instances[@]} -eq 0 ]]; then
+        warn "No managed WireGuard instances found."
+        pause
+        return 0
+    fi
+
+    local iface
+    iface="$(_pick_instance "Select interface")" || { pause; return 0; }
+
+    local backend
+    backend="$(backend_for_iface "$iface")"
+    local bin
+    bin="$( [[ "$backend" == "awg" ]] && echo "awg" || echo "wg" )"
+    local unit
+    unit="$(_systemd_unit "$backend" "$iface")"
+
+    echo
+    echo -e "${BOLD}  Interface:  ${NC}${iface}"
+    echo -e "${BOLD}  Backend:    ${NC}${backend}"
+    echo -e "${BOLD}  Unit:       ${NC}${unit}"
+
+    local state
+    state="$(_iface_state "$iface")"
+    case "$state" in
+        UP)      echo -e "${BOLD}  State:      ${GREEN}UP${NC}" ;;
+        DOWN)    echo -e "${BOLD}  State:      ${YELLOW}DOWN${NC}" ;;
+        STOPPED) echo -e "${BOLD}  State:      ${RED}STOPPED${NC}" ;;
+    esac
+
+    local boot
+    boot="$(_iface_boot "$iface")"
+    echo -e "${BOLD}  Boot:       ${NC}${boot}"
+
+    if backend_is_up "$iface" 2>/dev/null; then
+        echo
+        echo -e "${BOLD}  WireGuard show:${NC}"
+        echo "  ─────────────────────────────────────────"
+        "$bin" show "$iface" 2>/dev/null | sed 's/^/  /' || true
+    fi
+
+    echo
+    echo -e "${BOLD}  systemctl status:${NC}"
+    echo "  ─────────────────────────────────────────"
+    systemctl status "$unit" --no-pager -l 2>/dev/null | head -20 | sed 's/^/  /' || true
 
     pause
 }

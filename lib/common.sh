@@ -31,7 +31,7 @@ require_root() {
 
 pause() {
     echo
-    read -rp "Press Enter to continue..." _
+    read -rep "Press Enter to continue..." _
 }
 
 # --- Package helper ----------------------------------------------------------
@@ -61,7 +61,7 @@ check_dependencies() {
 
     warn "Missing packages: ${missing[*]}"
     echo
-    read -rp "Install missing packages now? [Y/n]: " answer
+    read -rep "Install missing packages now? [Y/n]: " answer
     answer="${answer:-Y}"
 
     if [[ "${answer,,}" != "y" ]]; then

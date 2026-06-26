@@ -40,7 +40,7 @@ prompt_iface_name() {
     local name err
 
     while true; do
-        read -rp "Interface name (e.g. wg100): " name
+        read -rep "Interface name (e.g. wg100): " name
         name="${name// /}"
 
         if [[ -z "$name" ]]; then
@@ -118,7 +118,7 @@ prompt_cidr() {
     local cidr err
 
     while true; do
-        read -rp "Network CIDR (e.g. 10.100.100.0/24): " cidr
+        read -rep "Network CIDR (e.g. 10.100.100.0/24): " cidr
         cidr="${cidr// /}"
 
         if [[ -z "$cidr" ]]; then

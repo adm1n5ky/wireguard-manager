@@ -64,7 +64,7 @@ server_create() {
     local mtu err
 
     while true; do
-        read -rp "MTU [${DEFAULT_MTU}]: " mtu
+        read -rep "MTU [${DEFAULT_MTU}]: " mtu
         mtu="${mtu:-$DEFAULT_MTU}"
 
         err="$(validate_mtu "$mtu")"
@@ -81,7 +81,7 @@ server_create() {
     default_keydir="$(key_dir "$iface")"
     local keydir
 
-    read -rp "Key directory [${default_keydir}]: " keydir
+    read -rep "Key directory [${default_keydir}]: " keydir
     keydir="${keydir:-$default_keydir}"
     keydir="${keydir%/}"
 
@@ -95,7 +95,7 @@ server_create() {
     echo
     echo -e "${CYAN}── Step 8: Pre-shared Keys ──${NC}"
     local use_psk
-    read -rp "Use unique PSK per client? [Y/n]: " use_psk
+    read -rep "Use unique PSK per client? [Y/n]: " use_psk
     use_psk="${use_psk:-Y}"
     if [[ "${use_psk,,}" == "y" ]]; then
         use_psk="yes"
@@ -120,7 +120,7 @@ server_create() {
     echo -e "${BOLD}══════════════════════════════════════${NC}"
     echo
 
-    read -rp "Proceed with creation? [Y/n]: " confirm
+    read -rep "Proceed with creation? [Y/n]: " confirm
     confirm="${confirm:-Y}"
     if [[ "${confirm,,}" != "y" ]]; then
         info "Cancelled."
@@ -207,7 +207,7 @@ EOF
 
     # ── Offer to start the interface ──────────────────────────────────────────
     echo
-    read -rp "Start interface now? [Y/n]: " start_now
+    read -rep "Start interface now? [Y/n]: " start_now
     start_now="${start_now:-Y}"
 
     if [[ "${start_now,,}" == "y" ]]; then

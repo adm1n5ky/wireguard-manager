@@ -54,10 +54,10 @@ prompt_endpoint() {
 
     while true; do
         if [[ -n "$suggested" ]]; then
-            read -rp "Endpoint (IP or domain) [${suggested}]: " endpoint
+            read -rep "Endpoint (IP or domain) [${suggested}]: " endpoint
             endpoint="${endpoint:-$suggested}"
         else
-            read -rp "Endpoint (IP or domain, required): " endpoint
+            read -rep "Endpoint (IP or domain, required): " endpoint
         fi
 
         endpoint="${endpoint// /}"

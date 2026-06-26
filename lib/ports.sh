@@ -55,7 +55,7 @@ prompt_port() {
 
     while true; do
         echo
-        read -rp "Listen port [${suggested}]: " port
+        read -rep "Listen port [${suggested}]: " port
         port="${port:-$suggested}"
 
         err="$(validate_port "$port")"

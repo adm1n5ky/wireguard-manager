@@ -306,7 +306,7 @@ peer_monitor() {
 
         local choice
         while true; do
-            read -rp "  Select instance: " choice
+            read -rep "  Select instance: " choice
             [[ "$choice" == "0" ]] && return 0
             if [[ "$choice" =~ ^[0-9]+$ ]] && \
                (( choice >= 1 && choice <= ${#instances[@]} )); then

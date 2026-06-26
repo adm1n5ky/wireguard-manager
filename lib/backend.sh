@@ -175,7 +175,7 @@ prompt_backend() {
 
     local choice
     while true; do
-        read -rp "Select backend [1]: " choice
+        read -rep "Select backend [1]: " choice
         choice="${choice:-1}"
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#opts[@]} )); then
             _pb_out="${opts[$(( choice - 1 ))]}"

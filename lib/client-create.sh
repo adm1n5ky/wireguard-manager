@@ -36,7 +36,7 @@ client_create() {
 
     local schoice iface
     while true; do
-        read -rp "Server: " schoice
+        read -rep "Server: " schoice
         [[ "$schoice" == "0" ]] && { info "Cancelled."; return 0; }
         if [[ "$schoice" =~ ^[0-9]+$ ]] && (( schoice >= 1 && schoice <= ${#instances[@]} )); then
             iface="${instances[$(( schoice - 1 ))]}"
@@ -66,7 +66,7 @@ client_create() {
     echo -e "${CYAN}── Step 1: Client Name ──${NC}"
     local client_name
     while true; do
-        read -rp "Client name (e.g. phone-alice): " client_name
+        read -rep "Client name (e.g. phone-alice): " client_name
         client_name="${client_name// /_}"
         client_name="${client_name//[^a-zA-Z0-9_-]/}"
 
@@ -89,7 +89,7 @@ client_create() {
     echo
     echo -e "${CYAN}── Step 2: DNS ──${NC}"
     local dns
-    read -rp "DNS servers [1.1.1.1, 1.0.0.1]: " dns
+    read -rep "DNS servers [1.1.1.1, 1.0.0.1]: " dns
     dns="${dns:-1.1.1.1, 1.0.0.1}"
 
     # ── Step 3: Allowed IPs (split tunnel vs full tunnel) ─────────────────────
@@ -100,7 +100,7 @@ client_create() {
     echo "  3) Custom"
     echo
     local allowed_ips rchoice
-    read -rp "Routing [1]: " rchoice
+    read -rep "Routing [1]: " rchoice
     rchoice="${rchoice:-1}"
 
     local server_network
@@ -110,7 +110,7 @@ client_create() {
         1) allowed_ips="0.0.0.0/0, ::/0" ;;
         2) allowed_ips="${server_network}" ;;
         3)
-            read -rp "AllowedIPs: " allowed_ips
+            read -rep "AllowedIPs: " allowed_ips
             if [[ -z "$allowed_ips" ]]; then
                 warn "Empty input, using full tunnel."
                 allowed_ips="0.0.0.0/0, ::/0"
@@ -126,7 +126,7 @@ client_create() {
     keydir="$(env_get "$env_file" WG_KEY_DIR)"
     local client_dir="${keydir}/clients/${client_name}"
 
-    read -rp "Client config directory [${client_dir}]: " client_dir_in
+    read -rep "Client config directory [${client_dir}]: " client_dir_in
     client_dir="${client_dir_in:-$client_dir}"
     client_dir="${client_dir%/}"
 
@@ -245,13 +245,19 @@ client_create() {
     [[ -n "$psk" ]] && info "PSK:           (stored in configs)"
     echo
 
+    # ── Print config for copy-paste ───────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    cat "$c_conf_file"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo
+
     # ── Offer QR ──────────────────────────────────────────────────────────────
     if command -v qrencode &>/dev/null; then
-        read -rp "Show QR code in terminal? [Y/n]: " qr_ans
+        read -rep "Show QR code in terminal? [Y/n]: " qr_ans
         qr_ans="${qr_ans:-Y}"
         if [[ "${qr_ans,,}" == "y" ]]; then
             echo
-            qrencode -t ansiutf8 < "$c_conf_file"
+            qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"
             echo
         fi
     else
@@ -289,7 +295,7 @@ _client_create_on() {
     echo -e "${CYAN}── Client Name ──${NC}"
     local client_name
     while true; do
-        read -rp "Client name (e.g. phone-alice): " client_name
+        read -rep "Client name (e.g. phone-alice): " client_name
         client_name="${client_name// /_}"
         client_name="${client_name//[^a-zA-Z0-9_-]/}"
         [[ -z "$client_name" ]]        && { warn "Name cannot be empty."; continue; }
@@ -300,7 +306,7 @@ _client_create_on() {
 
     echo; echo -e "${CYAN}── DNS ──${NC}"
     local dns
-    read -rp "DNS servers [1.1.1.1, 1.0.0.1]: " dns
+    read -rep "DNS servers [1.1.1.1, 1.0.0.1]: " dns
     dns="${dns:-1.1.1.1, 1.0.0.1}"
 
     echo; echo -e "${CYAN}── Routing ──${NC}"
@@ -308,17 +314,17 @@ _client_create_on() {
     echo "  2) Split tunnel (VPN subnet only)"
     echo "  3) Custom"
     local rchoice allowed_ips
-    read -rp "Routing [1]: " rchoice; rchoice="${rchoice:-1}"
+    read -rep "Routing [1]: " rchoice; rchoice="${rchoice:-1}"
     case "$rchoice" in
         2) allowed_ips="${server_network}" ;;
-        3) read -rp "AllowedIPs: " allowed_ips; allowed_ips="${allowed_ips:-0.0.0.0/0, ::/0}" ;;
+        3) read -rep "AllowedIPs: " allowed_ips; allowed_ips="${allowed_ips:-0.0.0.0/0, ::/0}" ;;
         *) allowed_ips="0.0.0.0/0, ::/0" ;;
     esac
 
     echo; echo -e "${CYAN}── Output ──${NC}"
     local keydir; keydir="$(env_get "$env_file" WG_KEY_DIR)"
     local client_dir="${keydir}/clients/${client_name}"
-    read -rp "Client config directory [${client_dir}]: " client_dir_in
+    read -rep "Client config directory [${client_dir}]: " client_dir_in
     client_dir="${client_dir_in:-$client_dir}"; client_dir="${client_dir%/}"
 
     info "Allocating IP..."
@@ -405,9 +411,18 @@ _client_create_on() {
     info "Config:  ${c_conf_file}"
     echo
 
+    # ── Print config for copy-paste ───────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    cat "$c_conf_file"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo
+
+    # ── Offer QR ──────────────────────────────────────────────────────────────
     if command -v qrencode &>/dev/null; then
-        read -rp "Show QR code? [Y/n]: " qr_ans; qr_ans="${qr_ans:-Y}"
-        [[ "${qr_ans,,}" == "y" ]] && { echo; qrencode -t ansiutf8 < "$c_conf_file"; echo; }
+        read -rep "Show QR code? [Y/n]: " qr_ans; qr_ans="${qr_ans:-Y}"
+        [[ "${qr_ans,,}" == "y" ]] && { echo; qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"; echo; }
+    else
+        info "Install qrencode for QR code support: apt-get install qrencode"
     fi
 
     pause

@@ -33,7 +33,7 @@ server_delete() {
 
     local choice iface
     while true; do
-        read -rp "Select instance to delete: " choice
+        read -rep "Select instance to delete: " choice
         if [[ "$choice" == "0" ]]; then
             info "Cancelled."
             return 0
@@ -70,7 +70,7 @@ server_delete() {
     fi
     echo
 
-    read -rp "Type the interface name to confirm deletion (${iface}): " confirm_name
+    read -rep "Type the interface name to confirm deletion (${iface}): " confirm_name
     if [[ "$confirm_name" != "$iface" ]]; then
         warn "Name does not match. Deletion cancelled."
         pause

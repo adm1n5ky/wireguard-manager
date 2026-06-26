@@ -34,7 +34,7 @@ client_delete() {
 
     local schoice iface
     while true; do
-        read -rp "Server: " schoice
+        read -rep "Server: " schoice
         [[ "$schoice" == "0" ]] && { info "Cancelled."; return 0; }
         if [[ "$schoice" =~ ^[0-9]+$ ]] && (( schoice >= 1 && schoice <= ${#instances[@]} )); then
             iface="${instances[$(( schoice - 1 ))]}"
@@ -115,7 +115,7 @@ _client_delete_on() {
 
     local cchoice
     while true; do
-        read -rp "Select client to delete: " cchoice
+        read -rep "Select client to delete: " cchoice
         [[ "$cchoice" == "0" ]] && { info "Cancelled."; return 0; }
         if [[ "$cchoice" =~ ^[0-9]+$ ]] && (( cchoice >= 1 && cchoice <= ${#client_names[@]} )); then
             break
@@ -144,7 +144,7 @@ _client_delete_on() {
     [[ -d "$client_dir" ]] && echo "     Files:     ${client_dir}/"
     echo
 
-    read -rp "Type client name to confirm (${del_name}): " confirm_name
+    read -rep "Type client name to confirm (${del_name}): " confirm_name
     if [[ "$confirm_name" != "$del_name" ]]; then
         warn "Name does not match. Deletion cancelled."
         pause
@@ -164,7 +164,7 @@ _client_delete_on() {
 
     # ── Remove client files ───────────────────────────────────────────────────
     if [[ -d "$client_dir" ]]; then
-        read -rp "Delete client files (${client_dir}/)? [Y/n]: " del_files
+        read -rep "Delete client files (${client_dir}/)? [Y/n]: " del_files
         del_files="${del_files:-Y}"
         if [[ "${del_files,,}" == "y" ]]; then
             rm -rf "$client_dir"

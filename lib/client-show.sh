@@ -67,7 +67,7 @@ _client_show_on() {
 
     local cchoice
     while true; do
-        read -rp "Select client: " cchoice
+        read -rep "Select client: " cchoice
         [[ "$cchoice" == "0" ]] && { info "Cancelled."; return 0; }
         if [[ "$cchoice" =~ ^[0-9]+$ ]] && (( cchoice >= 1 && cchoice <= ${#client_names[@]} )); then
             break

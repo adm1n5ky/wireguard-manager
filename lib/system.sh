@@ -103,7 +103,7 @@ system_check_packages() {
     local to_install=("${missing_required[@]}")
 
     if [[ ${#missing_optional[@]} -gt 0 ]]; then
-        read -rp "Install optional packages too? [y/N]: " opt_ans
+        read -rep "Install optional packages too? [y/N]: " opt_ans
         opt_ans="${opt_ans:-N}"
         if [[ "${opt_ans,,}" == "y" ]]; then
             to_install+=("${missing_optional[@]}")
@@ -116,7 +116,7 @@ system_check_packages() {
         return 0
     fi
 
-    read -rp "Install ${to_install[*]}? [Y/n]: " answer
+    read -rep "Install ${to_install[*]}? [Y/n]: " answer
     answer="${answer:-Y}"
     if [[ "${answer,,}" != "y" ]]; then
         info "Cancelled."
@@ -192,7 +192,7 @@ system_update() {
     info "Repository: ${repo_dir}"
     echo
 
-    read -rp "Pull latest changes from git? [Y/n]: " confirm
+    read -rep "Pull latest changes from git? [Y/n]: " confirm
     confirm="${confirm:-Y}"
     if [[ "${confirm,,}" != "y" ]]; then
         info "Cancelled."
