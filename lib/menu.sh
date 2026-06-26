@@ -175,15 +175,10 @@ menu_clients() {
 
 _menu_clients_for() {
     local iface="$1"
-    local do_clear=1
 
     while true; do
-        if (( do_clear )); then
-            clear
-            _print_header_noclear
-        fi
-        do_clear=1
-
+        clear
+        _print_header_noclear
         echo -e "  ${BOLD}Clients — ${iface}${NC}"
         echo
         _clients_list_compact "$iface"
@@ -202,7 +197,7 @@ _menu_clients_for() {
         case "$choice" in
             1) client_create_for "$iface" ;;
             2) client_delete_for "$iface" ;;
-            3) client_show_for "$iface"; do_clear=0 ;;
+            3) client_show_for "$iface" ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
         esac
