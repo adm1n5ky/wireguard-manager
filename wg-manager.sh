@@ -10,7 +10,7 @@ LIB_DIR="${SCRIPT_DIR}/lib"
 
 for module in common backend table validation network ports endpoint ip-pool \
               config-list server-create server-delete client-create client-delete \
-              status peer-monitor system menu; do
+              client-show status peer-monitor system menu; do
     lib_file="${LIB_DIR}/${module}.sh"
     if [[ ! -f "$lib_file" ]]; then
         echo "ERROR: Missing module: ${lib_file}" >&2
