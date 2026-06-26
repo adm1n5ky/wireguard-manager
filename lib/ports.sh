@@ -51,30 +51,30 @@ prompt_port() {
 
     info "Scanning for available UDP ports..."
 
-    local port err
+    local _port_val _port_err
 
     while true; do
         echo
-        read -rep "Listen port [${suggested}]: " port
-        port="${port:-$suggested}"
+        read -rep "Listen port [${suggested}]: " _port_val
+        _port_val="${_port_val:-$suggested}"
 
-        err="$(validate_port "$port")"
+        _port_err="$(validate_port "$_port_val")"
         if [[ $? -ne 0 ]]; then
-            warn "$err"
+            warn "$_port_err"
             continue
         fi
 
-        if port_used_runtime "$port"; then
-            warn "Port ${port}/udp is currently in use (ss)."
+        if port_used_runtime "$_port_val"; then
+            warn "Port ${_port_val}/udp is currently in use (ss)."
             continue
         fi
 
-        if port_used_configs "$port"; then
-            warn "Port ${port} is already used in another WireGuard config."
+        if port_used_configs "$_port_val"; then
+            warn "Port ${_port_val} is already used in another WireGuard config."
             continue
         fi
 
-        _pp_out="$port"
+        _pp_out="$_port_val"
         return 0
     done
 }

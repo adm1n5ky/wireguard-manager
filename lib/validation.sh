@@ -37,23 +37,23 @@ validate_iface_name() {
 # Usage: prompt_iface_name VARNAME
 prompt_iface_name() {
     local -n _pif_out=$1
-    local name err
+    local _iface_val _iface_err
 
     while true; do
-        read -rep "Interface name (e.g. wg100): " name
-        name="${name// /}"
+        read -rep "Interface name (e.g. wg100): " _iface_val
+        _iface_val="${_iface_val// /}"
 
-        if [[ -z "$name" ]]; then
+        if [[ -z "$_iface_val" ]]; then
             warn "Interface name cannot be empty."
             continue
         fi
 
-        err="$(validate_iface_name "$name")"
+        _iface_err="$(validate_iface_name "$_iface_val")"
         if [[ $? -eq 0 ]]; then
-            _pif_out="$name"
+            _pif_out="$_iface_val"
             return 0
         fi
-        warn "$err"
+        warn "$_iface_err"
     done
 }
 
@@ -89,15 +89,24 @@ validate_cidr() {
         return 1
     fi
 
-    local ip_int mask_int
-    ip_int="$(ip_to_int "$ip")"
-    mask_int="$(prefix_to_mask_int "$prefix")"
-    local host_bits=$(( ip_int & ~mask_int ))
-    if (( host_bits != 0 )); then
-        local network_ip
-        network_ip="$(int_to_ip $(( ip_int & mask_int )))"
-        echo "Address is a host address, not a network address. Did you mean ${network_ip}/${prefix}?"
-        return 1
+    if command -v ipcalc &>/dev/null; then
+        local network
+        network="$(ipcalc -n "$cidr" 2>/dev/null | grep -i '^Network:' | awk '{print $2}')"
+        if [[ -n "$network" && "$network" != "$cidr" ]]; then
+            echo "Address is a host address, not a network address. Did you mean ${network}?"
+            return 1
+        fi
+    else
+        local ip_int mask_int
+        ip_int="$(ip_to_int "$ip")"
+        mask_int="$(prefix_to_mask_int "$prefix")"
+        local host_bits=$(( ip_int & ~mask_int ))
+        if (( host_bits != 0 )); then
+            local network_ip
+            network_ip="$(int_to_ip $(( ip_int & mask_int )))"
+            echo "Address is a host address, not a network address. Did you mean ${network_ip}/${prefix}?"
+            return 1
+        fi
     fi
 
     return 0
@@ -106,23 +115,23 @@ validate_cidr() {
 # Usage: prompt_cidr VARNAME
 prompt_cidr() {
     local -n _pc_out=$1
-    local cidr err
+    local _cidr_val _cidr_err
 
     while true; do
-        read -rep "Network CIDR (e.g. 10.100.100.0/24): " cidr
-        cidr="${cidr// /}"
+        read -rep "Network CIDR (e.g. 10.100.100.0/24): " _cidr_val
+        _cidr_val="${_cidr_val// /}"
 
-        if [[ -z "$cidr" ]]; then
+        if [[ -z "$_cidr_val" ]]; then
             warn "Network CIDR cannot be empty."
             continue
         fi
 
-        err="$(validate_cidr "$cidr")"
+        _cidr_err="$(validate_cidr "$_cidr_val")"
         if [[ $? -eq 0 ]]; then
-            _pc_out="$cidr"
+            _pc_out="$_cidr_val"
             return 0
         fi
-        warn "$err"
+        warn "$_cidr_err"
     done
 }
 
