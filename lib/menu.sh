@@ -98,7 +98,7 @@ menu_servers() {
         echo "  2) Delete server"
         echo "  3) Start interface"
         echo "  4) Stop interface"
-        echo "  5) Interface status"
+        echo "  5) Peer Monitor"
         echo "  6) Manage clients →"
         echo
         echo "  0) Back to main menu"
@@ -112,7 +112,7 @@ menu_servers() {
             2) server_delete ;;
             3) server_up ;;
             4) server_down ;;
-            5) server_status ;;
+            5) peer_monitor ;;
             6) menu_clients ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;

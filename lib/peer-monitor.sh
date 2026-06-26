@@ -137,25 +137,18 @@ _render_peer_table() {
         *)       state_label="$iface_state" ; state_col="$NC" ;;
     esac
 
-    # Рамка — ширина фиксирована, считаем визуально (LC_ALL=C для ${#})
-    # Внутренняя ширина: W символов (без ╔ ╗ и двух пробелов отступа)
     local W=74
     local border
     printf -v border '%*s' "$W" '' ; border="${border// /═}"
 
     echo -e "${BOLD}${CYAN}  ╔${border}╗${NC}"
 
-    # Заголовок внутри рамки — все строки только ASCII+цифры, длины точные
-    # "Peer Monitor - wg100" + "  [UP]" + пробелы + "2026-06-25 09:50:21"
-    local title="Peer Monitor - ${iface}"      # ASCII дефис, не em-dash
+    local title="Peer Monitor - ${iface}"
     local state_plain="[${state_label}]"
-    local right="$now_fmt"                      # 19 символов всегда
+    local right="$now_fmt"
 
-    # Визуальная длина строки внутри рамки: W (═══) = контент + 2 пробела по краям
-    # ║ + space + title + "  " + state_plain + pad + right + space + ║
-    # inner = W - 2 (два пробела: после ║ и перед ║)
     local inner=$(( W - 2 ))
-    local left_len=$(( ${#title} + 2 + ${#state_plain} ))  # title + "  " + [UP]
+    local left_len=$(( ${#title} + 2 + ${#state_plain} ))
     local pad=$(( inner - left_len - ${#right} ))
     (( pad < 1 )) && pad=1
     local spaces
@@ -172,7 +165,6 @@ _render_peer_table() {
         echo -e "  ${YELLOW}Interface is not up — no live data available.${NC}"
         echo
         echo -e "  ${BOLD}[q]${NC} quit"
-        # Затираем остаток экрана
         tput ed 2>/dev/null
         return
     fi
@@ -193,7 +185,6 @@ _render_peer_table() {
     fi
 
     # ── Заголовок таблицы ─────────────────────────────────────────────────────
-    # Колонки: №(3) NAME(20) ENDPOINT(25) LAST SEEN(11) RX(11) TX(11) STATUS(10)
     printf "  ${BOLD}%-3s  %-20s  %-25s  %-11s  %-11s  %-11s  %-10s${NC}\n" \
            "#" "NAME" "ENDPOINT" "LAST SEEN" "RX" "TX" "STATUS"
     echo   "  ────────────────────────────────────────────────────────────────────────────────"
@@ -239,7 +230,6 @@ _render_peer_table() {
             *)      stale_count=$(( stale_count + 1 ))   ;;
         esac
 
-        # Печатаем строку: фиксированные поля без ANSI внутри %-форматов
         printf "  %-3d  %-20s  %-25s  %-11s  %-11s  %-11s  " \
                "$idx" \
                "${name:0:20}" \
@@ -247,7 +237,6 @@ _render_peer_table() {
                "$last_seen" \
                "$rx_fmt" \
                "$tx_fmt"
-        # STATUS со цветом — отдельно, после всех полей
         printf "%b%s %s%b\n" "$col" "$dot" "$status" "$NC"
 
     done <<< "$peers_raw"
@@ -266,7 +255,6 @@ _render_peer_table() {
     echo
     printf "  ${BOLD}Refresh: %ds${NC}   ${BOLD}[q]${NC} quit\n" "$MONITOR_INTERVAL"
 
-    # Затираем всё что ниже курсора (хвост от предыдущего фрейма)
     tput ed 2>/dev/null
 }
 
@@ -304,13 +292,13 @@ peer_monitor() {
         echo "  0) Cancel"
         echo
 
-        local choice
+        local _pm_choice
         while true; do
-            read -rep "  Select instance: " choice
-            [[ "$choice" == "0" ]] && return 0
-            if [[ "$choice" =~ ^[0-9]+$ ]] && \
-               (( choice >= 1 && choice <= ${#instances[@]} )); then
-                iface="${instances[$(( choice - 1 ))]}"
+            read -rep "  Select instance: " _pm_choice
+            [[ "$_pm_choice" == "0" ]] && return 0
+            if [[ "$_pm_choice" =~ ^[0-9]+$ ]] && \
+               (( _pm_choice >= 1 && _pm_choice <= ${#instances[@]} )); then
+                iface="${instances[$(( _pm_choice - 1 ))]}"
                 break
             fi
             warn "Invalid selection."
@@ -318,19 +306,17 @@ peer_monitor() {
     fi
 
     # ── Realtime цикл ─────────────────────────────────────────────────────────
-    tput civis 2>/dev/null                  # скрыть курсор
+    tput civis 2>/dev/null
 
     _monitor_cleanup() {
-        tput cnorm 2>/dev/null              # вернуть курсор
+        tput cnorm 2>/dev/null
     }
     trap '_monitor_cleanup; return 0' INT TERM
 
-    # Сохраняем строку, с которой начнём рисовать
-    # (после выбора инстанса экран не чистили — делаем один clear перед первым фреймом)
     clear
 
     while true; do
-        tput cup 0 0                        # курсор в начало, без clear
+        tput cup 0 0
         _render_peer_table "$iface"
 
         if read -r -s -n 1 -t "$MONITOR_INTERVAL" key 2>/dev/null; then
@@ -340,5 +326,5 @@ peer_monitor() {
 
     trap - INT TERM
     _monitor_cleanup
-    clear                                   # убираем монитор, menu_servers перерисует сам
+    clear
 }
