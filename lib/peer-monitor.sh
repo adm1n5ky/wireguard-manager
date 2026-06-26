@@ -237,7 +237,9 @@ _render_peer_table() {
                "$last_seen" \
                "$rx_fmt" \
                "$tx_fmt"
-        printf "%b%s %s%b\n" "$col" "$dot" "$status" "$NC"
+        printf "%b%s %s%b" "$col" "$dot" "$status" "$NC"
+        tput el 2>/dev/null
+        echo
 
     done <<< "$peers_raw"
 
