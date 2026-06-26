@@ -89,24 +89,15 @@ validate_cidr() {
         return 1
     fi
 
-    if command -v ipcalc &>/dev/null; then
-        local network
-        network="$(ipcalc -n "$cidr" 2>/dev/null | grep -i '^Network:' | awk '{print $2}')"
-        if [[ -n "$network" && "$network" != "$cidr" ]]; then
-            echo "Address is a host address, not a network address. Did you mean ${network}?"
-            return 1
-        fi
-    else
-        local ip_int mask_int
-        ip_int="$(ip_to_int "$ip")"
-        mask_int="$(prefix_to_mask_int "$prefix")"
-        local host_bits=$(( ip_int & ~mask_int ))
-        if (( host_bits != 0 )); then
-            local network_ip
-            network_ip="$(int_to_ip $(( ip_int & mask_int )))"
-            echo "Address is a host address, not a network address. Did you mean ${network_ip}/${prefix}?"
-            return 1
-        fi
+    local ip_int mask_int
+    ip_int="$(ip_to_int "$ip")"
+    mask_int="$(prefix_to_mask_int "$prefix")"
+    local host_bits=$(( ip_int & ~mask_int ))
+    if (( host_bits != 0 )); then
+        local network_ip
+        network_ip="$(int_to_ip $(( ip_int & mask_int )))"
+        echo "Address is a host address, not a network address. Did you mean ${network_ip}/${prefix}?"
+        return 1
     fi
 
     return 0

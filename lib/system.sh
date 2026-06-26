@@ -3,7 +3,7 @@
 # lib/system.sh — Package management, module integrity, update
 # =============================================================================
 
-REQUIRED_PACKAGES_WG=(wireguard-tools ipcalc curl)
+REQUIRED_PACKAGES_WG=(wireguard-tools curl)
 OPTIONAL_PACKAGES=(qrencode)
 
 # Modules expected to be present in LIB_DIR

@@ -42,7 +42,7 @@ _pkg_installed() {
 
 # --- Bootstrap dependency check ----------------------------------------------
 
-BOOTSTRAP_REQUIRED=(ipcalc curl)
+BOOTSTRAP_REQUIRED=(curl)
 
 check_dependencies() {
     local missing=()
