@@ -3,8 +3,7 @@
 # lib/menu.sh — Main interactive menu (three-level structure)
 # =============================================================================
 
-_print_header() {
-    clear
+_print_header_noclear() {
     echo -e "${BOLD}${CYAN}"
     echo "  ╦ ╦╔═╗  ╔╦╗╔═╗╔╗╔╔═╗╔═╗╔═╗╦═╗"
     echo "  ║║║║ ╦  ║║║╠═╣║║║╠═╣║ ╦║╣ ╠╦╝"
@@ -13,6 +12,11 @@ _print_header() {
     echo -e "${BOLD}  WireGuard Multi-Instance Manager  v1.0${NC}"
     echo -e "  Ubuntu 24/26 LTS"
     echo
+}
+
+_print_header() {
+    clear
+    _print_header_noclear
 }
 
 _print_instance_summary() {
@@ -173,7 +177,8 @@ _menu_clients_for() {
     local iface="$1"
 
     while true; do
-        _print_header
+        clear
+        _print_header_noclear
         echo -e "  ${BOLD}Clients — ${iface}${NC}"
         echo
         _clients_list_compact "$iface"
@@ -182,7 +187,6 @@ _menu_clients_for() {
         echo "  1) Add client"
         echo "  2) Delete client"
         echo "  3) Show client .conf & QR code"
-        echo "  4) SSH push config     [roadmap]"
         echo
         echo "  0) Back"
         echo
@@ -193,11 +197,7 @@ _menu_clients_for() {
         case "$choice" in
             1) client_create_for "$iface" ;;
             2) client_delete_for "$iface" ;;
-            3) client_show_for "$iface" ;;
-            4)
-                warn "Not implemented yet — coming in roadmap."
-                sleep 1
-                ;;
+            3) client_show_for "$iface"; continue ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
         esac

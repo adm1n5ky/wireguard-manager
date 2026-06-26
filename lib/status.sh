@@ -12,7 +12,7 @@ _pick_instance() {
     mapfile -t instances < <(list_wg_instances)
 
     if [[ ${#instances[@]} -eq 0 ]]; then
-        warn "No managed WireGuard instances found."
+        warn "No managed WireGuard instances found." >&2
         return 1
     fi
 
@@ -22,14 +22,14 @@ _pick_instance() {
         local state backend
         state="$(_iface_state "$name")"
         backend="$(backend_for_iface "$name")"
-        printf "  %d) %-15s [%s] (%s)\n" $(( i + 1 )) "$name" "$state" "$backend"
+        printf "  %d) %-15s [%s] (%s)\n" $(( i + 1 )) "$name" "$state" "$backend" >&2
     done
-    echo "  0) Cancel"
-    echo
+    echo "  0) Cancel" >&2
+    echo >&2
 
     local choice
     while true; do
-        read -rep "${prompt}: " choice
+        read -rep "${prompt}: " choice <>/dev/tty
         if [[ "$choice" == "0" ]]; then
             return 1
         fi
@@ -37,7 +37,7 @@ _pick_instance() {
             echo "${instances[$(( choice - 1 ))]}"
             return 0
         fi
-        warn "Invalid selection."
+        warn "Invalid selection." >&2
     done
 }
 
