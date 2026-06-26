@@ -50,28 +50,28 @@ prompt_endpoint() {
         warn "Could not auto-detect public IP. Please enter manually."
     fi
 
-    local endpoint err
+    local _ep_val _ep_err
 
     while true; do
         if [[ -n "$suggested" ]]; then
-            read -rep "Endpoint (IP or domain) [${suggested}]: " endpoint
-            endpoint="${endpoint:-$suggested}"
+            read -rep "Endpoint (IP or domain) [${suggested}]: " _ep_val
+            _ep_val="${_ep_val:-$suggested}"
         else
-            read -rep "Endpoint (IP or domain, required): " endpoint
+            read -rep "Endpoint (IP or domain, required): " _ep_val
         fi
 
-        endpoint="${endpoint// /}"
+        _ep_val="${_ep_val// /}"
 
-        if [[ -z "$endpoint" ]]; then
+        if [[ -z "$_ep_val" ]]; then
             warn "Endpoint cannot be empty."
             continue
         fi
 
-        err="$(validate_endpoint "$endpoint")"
+        _ep_err="$(validate_endpoint "$_ep_val")"
         if [[ $? -eq 0 ]]; then
-            _pe_out="$endpoint"
+            _pe_out="$_ep_val"
             return 0
         fi
-        warn "$err"
+        warn "$_ep_err"
     done
 }
