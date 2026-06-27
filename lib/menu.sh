@@ -72,7 +72,8 @@ _peers_summary() {
 
     # Created: count [Peer] sections in conf
     if [[ -f "$conf_file" ]]; then
-        created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null || echo 0)"
+        created="$(grep -c '^\[Peer\]' "$conf_file" 2>/dev/null)"
+        created="${created:-0}"
     fi
 
     # Active: peers with recent handshake (via wg show, if up)
