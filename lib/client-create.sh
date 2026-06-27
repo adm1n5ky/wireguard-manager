@@ -2,6 +2,15 @@
 # =============================================================================
 # lib/client-create.sh — Add a new peer to an existing WireGuard server
 # =============================================================================
+# --- Generate SVG QR code for client config ----------------------------------
+
+_generate_qr_svg() {
+    local c_conf_file="$1"
+    local svg_file="${c_conf_file%.conf}.svg"
+    if command -v qrencode &>/dev/null; then
+        qrencode -l L -t SVG -o "$svg_file" < "$c_conf_file" 2>/dev/null &&             chmod 600 "$svg_file" &&             echo "$svg_file"
+    fi
+}
 
 client_create() {
     echo
@@ -234,12 +243,17 @@ client_create() {
         info "Interface is down — peer will be active on next start."
     fi
 
+    # ── Generate SVG QR ───────────────────────────────────────────────────────
+    local svg_file
+    svg_file="$(_generate_qr_svg "$c_conf_file")"
+
     # ── Summary ───────────────────────────────────────────────────────────────
     echo
     ok "Client '${client_name}' created on '${iface}'."
     echo
     info "IP address:    ${BOLD}${client_addr}${NC}"
     info "Config:        ${c_conf_file}"
+    [[ -n "$svg_file" ]] && echo -e "${CYAN}[i]${NC} QR SVG:        ${GREEN}${svg_file}${NC}"
     info "Private key:   ${c_priv_file}"
     info "Public key:    ${BOLD}${client_pub}${NC}"
     [[ -n "$psk" ]] && info "PSK:           (stored in configs)"
@@ -251,17 +265,13 @@ client_create() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo
 
-    # ── Offer QR ──────────────────────────────────────────────────────────────
-    if command -v qrencode &>/dev/null; then
-        read -rep "Show QR code in terminal? [Y/n]: " qr_ans
-        qr_ans="${qr_ans:-Y}"
-        if [[ "${qr_ans,,}" == "y" ]]; then
-            echo
-            qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"
-            echo
-        fi
-    else
-        info "Install qrencode for QR code support: apt-get install qrencode"
+    # ── Offer terminal QR ─────────────────────────────────────────────────────
+    read -rep "Show QR code in terminal? [Y/n]: " qr_ans
+    qr_ans="${qr_ans:-Y}"
+    if [[ "${qr_ans,,}" == "y" ]]; then
+        echo
+        qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"
+        echo
     fi
 
     pause
@@ -405,10 +415,15 @@ _client_create_on() {
         fi
     fi
 
+    # ── Generate SVG QR ───────────────────────────────────────────────────────
+    local svg_file
+    svg_file="$(_generate_qr_svg "$c_conf_file")"
+
     echo
     ok "Client '${client_name}' created on '${iface}'."
     info "IP:      ${BOLD}${client_addr}${NC}"
     info "Config:  ${c_conf_file}"
+    [[ -n "$svg_file" ]] && echo -e "${CYAN}[i]${NC} QR SVG:  ${GREEN}${svg_file}${NC}"
     echo
 
     # ── Print config for copy-paste ───────────────────────────────────────────
@@ -417,13 +432,9 @@ _client_create_on() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo
 
-    # ── Offer QR ──────────────────────────────────────────────────────────────
-    if command -v qrencode &>/dev/null; then
-        read -rep "Show QR code? [Y/n]: " qr_ans; qr_ans="${qr_ans:-Y}"
-        [[ "${qr_ans,,}" == "y" ]] && { echo; qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"; echo; }
-    else
-        info "Install qrencode for QR code support: apt-get install qrencode"
-    fi
+    # ── Offer terminal QR ─────────────────────────────────────────────────────
+    read -rep "Show QR code? [Y/n]: " qr_ans; qr_ans="${qr_ans:-Y}"
+    [[ "${qr_ans,,}" == "y" ]] && { echo; qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"; echo; }
 
     pause
 }

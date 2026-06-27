@@ -132,19 +132,20 @@ _client_show_on() {
     cat "$c_conf_file"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+    # ── SVG QR — автосоздание если нет ──────────────────────────────────────
+    local svg_file="${c_conf_file%.conf}.svg"
+    if [[ ! -f "$svg_file" ]] && command -v qrencode &>/dev/null; then
+        qrencode -l L -t SVG -o "$svg_file" < "$c_conf_file" 2>/dev/null &&             chmod 600 "$svg_file"
+    fi
+    [[ -f "$svg_file" ]] && echo -e "${CYAN}[i]${NC} QR SVG:         ${GREEN}${svg_file}${NC}"
+
     # ── QR code ───────────────────────────────────────────────────────────────
     echo
     if command -v qrencode &>/dev/null; then
         info "QR code (scan with WireGuard app):"
         echo
-        # -l L  : error correction Low  — max data capacity for long configs
-        # -s 1  : 1 terminal cell per module — compact, readable on 80-col term
-        # -t ansiutf8 : colour UTF-8 blocks, best terminal rendering
         qrencode -l L -s 1 -t ansiutf8 < "$c_conf_file"
         echo
-    else
-        warn "qrencode not installed. To enable QR codes:"
-        echo "      apt install qrencode"
     fi
 
     pause

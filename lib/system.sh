@@ -3,8 +3,8 @@
 # lib/system.sh — Package management, module integrity, update
 # =============================================================================
 
-REQUIRED_PACKAGES_WG=(wireguard-tools curl)
-OPTIONAL_PACKAGES=(qrencode)
+REQUIRED_PACKAGES_WG=(wireguard-tools curl qrencode)
+OPTIONAL_PACKAGES=()
 
 # Modules expected to be present in LIB_DIR
 EXPECTED_MODULES=(
