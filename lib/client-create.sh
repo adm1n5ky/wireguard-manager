@@ -101,36 +101,13 @@ client_create() {
     read -rep "DNS servers [1.1.1.1, 1.0.0.1]: " dns
     dns="${dns:-1.1.1.1, 1.0.0.1}"
 
-    # ── Step 3: Allowed IPs (split tunnel vs full tunnel) ─────────────────────
-    echo
-    echo -e "${CYAN}── Step 3: Routing ──${NC}"
-    echo "  1) Full tunnel      (0.0.0.0/0 — all traffic via VPN)"
-    echo "  2) Split tunnel     (VPN subnet only)"
-    echo "  3) Custom"
-    echo
-    local allowed_ips rchoice
-    read -rep "Routing [1]: " rchoice
-    rchoice="${rchoice:-1}"
-
     local server_network
     server_network="$(env_get "$env_file" WG_NETWORK)"
+    local allowed_ips="0.0.0.0/0, 2000::/3"
 
-    case "$rchoice" in
-        1) allowed_ips="0.0.0.0/0, ::/0" ;;
-        2) allowed_ips="${server_network}" ;;
-        3)
-            read -rep "AllowedIPs: " allowed_ips
-            if [[ -z "$allowed_ips" ]]; then
-                warn "Empty input, using full tunnel."
-                allowed_ips="0.0.0.0/0, ::/0"
-            fi
-            ;;
-        *) allowed_ips="0.0.0.0/0, ::/0" ;;
-    esac
-
-    # ── Step 4: Output directory ──────────────────────────────────────────────
+    # ── Step 3: Output directory ──────────────────────────────────────────────
     echo
-    echo -e "${CYAN}── Step 5: Output ──${NC}"
+    echo -e "${CYAN}── Step 3: Output ──${NC}"
     local keydir
     keydir="$(env_get "$env_file" WG_KEY_DIR)"
     local client_dir="${keydir}/clients/${client_name}"
@@ -319,17 +296,7 @@ _client_create_on() {
     read -rep "DNS servers [1.1.1.1, 1.0.0.1]: " dns
     dns="${dns:-1.1.1.1, 1.0.0.1}"
 
-    echo; echo -e "${CYAN}── Routing ──${NC}"
-    echo "  1) Full tunnel  (0.0.0.0/0)"
-    echo "  2) Split tunnel (VPN subnet only)"
-    echo "  3) Custom"
-    local rchoice allowed_ips
-    read -rep "Routing [1]: " rchoice; rchoice="${rchoice:-1}"
-    case "$rchoice" in
-        2) allowed_ips="${server_network}" ;;
-        3) read -rep "AllowedIPs: " allowed_ips; allowed_ips="${allowed_ips:-0.0.0.0/0, ::/0}" ;;
-        *) allowed_ips="0.0.0.0/0, ::/0" ;;
-    esac
+    local allowed_ips="0.0.0.0/0, 2000::/3"
 
     echo; echo -e "${CYAN}── Output ──${NC}"
     local keydir; keydir="$(env_get "$env_file" WG_KEY_DIR)"
