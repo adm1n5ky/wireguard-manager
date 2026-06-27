@@ -12,6 +12,40 @@ _generate_qr_svg() {
     fi
 }
 
+
+# --- Allocate IPv6 addresses for client from all instance networks -----------
+
+_allocate_client_ipv6() {
+    local iface="$1"
+    local client_name="$2"
+    local env_file
+    env_file="$(env_path "$iface")"
+
+    local wg_network6
+    wg_network6="$(env_get "$env_file" WG_NETWORK6 2>/dev/null)"
+    [[ -z "$wg_network6" ]] && return 0   # IPv4-only instance
+
+    local addrs=()
+    IFS=',' read -ra _nets <<< "$wg_network6"
+    for _net in "${_nets[@]}"; do
+        _net="${_net// /}"
+        [[ -z "$_net" ]] && continue
+        local ip6
+        ip6="$(pool6_allocate "$iface" "$client_name" "$_net")"
+        if [[ -n "$ip6" ]]; then
+            local prefix="${_net#*/}"
+            addrs+=("${ip6}/${prefix}")
+            ok "IPv6 allocated: ${ip6}/${prefix} (from ${_net})"
+        else
+            warn "Could not allocate IPv6 from ${_net}"
+        fi
+    done
+
+    # Return as comma-separated string
+    local IFS=','
+    echo "${addrs[*]}"
+}
+
 client_create() {
     echo
     echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
@@ -137,6 +171,10 @@ client_create() {
     prefix="${server_network#*/}"
     local client_addr="${client_ip}/${prefix}"
 
+    # ── Allocate IPv6 ─────────────────────────────────────────────────────────
+    local client_ipv6_addrs
+    client_ipv6_addrs="$(_allocate_client_ipv6 "$iface" "$client_name")"
+
     # ── Generate client keys ──────────────────────────────────────────────────
     msg "Generating client keys (backend: ${backend})..."
     local client_priv client_pub
@@ -169,7 +207,11 @@ client_create() {
         echo ""
         echo "[Interface]"
         echo "PrivateKey = ${client_priv}"
-        echo "Address    = ${client_addr}"
+        if [[ -n "$client_ipv6_addrs" ]]; then
+            echo "Address    = ${client_addr}, ${client_ipv6_addrs}"
+        else
+            echo "Address    = ${client_addr}"
+        fi
         echo "DNS        = ${dns}"
         echo "MTU        = ${mtu}"
         echo ""
@@ -315,6 +357,10 @@ _client_create_on() {
     local prefix="${server_network#*/}"
     local client_addr="${client_ip}/${prefix}"
 
+    # ── Allocate IPv6 ─────────────────────────────────────────────────────────
+    local client_ipv6_addrs
+    client_ipv6_addrs="$(_allocate_client_ipv6 "$iface" "$client_name")"
+
     msg "Generating client keys (backend: ${backend})..."
     local client_priv client_pub psk=""
     client_priv="$(backend_genkey "$backend")"
@@ -337,7 +383,11 @@ _client_create_on() {
         echo ""
         echo "[Interface]"
         echo "PrivateKey = ${client_priv}"
-        echo "Address    = ${client_addr}"
+        if [[ -n "$client_ipv6_addrs" ]]; then
+            echo "Address    = ${client_addr}, ${client_ipv6_addrs}"
+        else
+            echo "Address    = ${client_addr}"
+        fi
         echo "DNS        = ${dns}"
         echo "MTU        = ${mtu}"
         echo ""

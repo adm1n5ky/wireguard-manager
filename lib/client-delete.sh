@@ -156,11 +156,14 @@ _client_delete_on() {
     _remove_peer_from_conf "$conf_file" "$del_pubkey"
     ok "Peer removed from ${conf_file}."
 
-    # ── Release IP back to pool ───────────────────────────────────────────────
+    # ── Release IPv4 back to pool ────────────────────────────────────────────
     if [[ "$del_ip" != "-" ]]; then
         pool_release "$iface" "$del_ip" 2>/dev/null && \
             info "IP ${del_ip} returned to pool."
     fi
+
+    # ── Release IPv6 back to pool ─────────────────────────────────────────────
+    pool6_release "$iface" "$del_name" 2>/dev/null
 
     # ── Remove client files ───────────────────────────────────────────────────
     if [[ -d "$client_dir" ]]; then

@@ -89,3 +89,102 @@ network_conflicts() {
 
     return 1
 }
+# =============================================================================
+# IPv6 helpers
+# =============================================================================
+
+# Expand a compressed IPv6 address to full 8-group form
+ipv6_expand() {
+    python3 -c "
+import sys, ipaddress
+try:
+    print(ipaddress.ip_address(sys.argv[1]).exploded)
+except:
+    print('')
+" "$1"
+}
+
+# Validate an IPv6 CIDR (e.g. 2001:470:7547:100::/64)
+validate_ipv6_cidr() {
+    python3 -c "
+import sys, ipaddress
+try:
+    net = ipaddress.ip_network(sys.argv[1], strict=True)
+    if net.version != 6:
+        print('Not an IPv6 network.')
+        sys.exit(1)
+    prefix = net.prefixlen
+    if prefix < 48 or prefix > 126:
+        print('Prefix must be between /48 and /126.')
+        sys.exit(1)
+    sys.exit(0)
+except ValueError as e:
+    print(str(e))
+    sys.exit(1)
+" "$1"
+}
+
+# Get server IPv6 address (first host) from a /64 CIDR
+# e.g. 2001:470:7547:100::/64 → 2001:470:7547:100::1/64
+ipv6_network_to_server_ip() {
+    python3 -c "
+import sys, ipaddress
+net = ipaddress.ip_network(sys.argv[1], strict=False)
+hosts = net.hosts()
+first = next(hosts)
+print(f'{first}/{net.prefixlen}')
+" "$1"
+}
+
+# Allocate next available IPv6 from pool (after last used)
+# Pool file: ip-pool6.dat, format: <ip> <status> <client> <ts>
+ipv6_next_host() {
+    python3 -c "
+import sys, ipaddress
+
+cidr   = sys.argv[1]
+last   = sys.argv[2] if len(sys.argv) > 2 else ''
+
+net    = ipaddress.ip_network(cidr, strict=False)
+start  = int(net.network_address) + 2   # ::1 reserved for server
+
+if last:
+    try:
+        start = int(ipaddress.ip_address(last)) + 1
+    except:
+        pass
+
+candidate = ipaddress.ip_address(start)
+# safety: must be within network
+if candidate not in net:
+    print('')
+    sys.exit(1)
+print(str(candidate))
+" "$1" "$2"
+}
+
+# Detect routable IPv6 prefixes available on this host (≤/64)
+detect_ipv6_prefixes() {
+    python3 -c "
+import subprocess, ipaddress, re
+
+result = subprocess.run(['ip', '-6', 'addr', 'show'], capture_output=True, text=True)
+seen = set()
+for line in result.stdout.splitlines():
+    m = re.search(r'inet6\s+([0-9a-f:]+/\d+)', line)
+    if not m:
+        continue
+    try:
+        net = ipaddress.ip_network(m.group(1), strict=False)
+    except:
+        continue
+    if net.is_loopback or net.is_link_local or net.is_multicast:
+        continue
+    if net.prefixlen > 64:
+        continue
+    key = str(net)
+    if key not in seen:
+        seen.add(key)
+        print(key)
+"
+}
