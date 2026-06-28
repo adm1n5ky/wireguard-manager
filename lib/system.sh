@@ -239,10 +239,8 @@ system_ipv6_networks() {
                     nat66)  type_col="${YELLOW}nat66${NC}"  ;;
                     *)      type_col="$type"               ;;
                 esac
-                printf "  %-4s %-38s " "$idx" "$cidr"
-                printf "%b%-8s%b %s\n" "" "" "$NC" ""
                 printf "  %-4s %-38s %b%-8s%b %s\n" \
-                    "$idx" "$cidr" "" "$type" "$NC" "$comment"
+                    "$idx" "$cidr" "$type_col" "$type" "$NC" "$comment"
             done < <(ipv6_read_available)
         fi
 
@@ -271,7 +269,7 @@ _ipv6_add_network() {
     echo -e "${CYAN}── Add IPv6 Network ──${NC}"
     echo
     echo "  Enter the CIDR of your routable IPv6 block."
-    echo "  Examples: 2001:470:7547::/48   2001:db8:1::/64"
+    echo "  Examples: 2001:abcd:1234::/48   2a01:c001:face:cafe::/64"
     echo
 
     # ── CIDR input ────────────────────────────────────────────────────────────
