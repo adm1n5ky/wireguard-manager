@@ -80,6 +80,7 @@ check_dependencies() {
 # --- WireGuard config paths --------------------------------------------------
 
 WG_CONFIG_DIR="/etc/wireguard"
+IPV6_AVAILABLE_CONF="${WG_CONFIG_DIR}/ipv6-available.conf"
 
 conf_path() { echo "${WG_CONFIG_DIR}/${1}.conf"; }
 env_path()  { echo "${WG_CONFIG_DIR}/${1}.env"; }

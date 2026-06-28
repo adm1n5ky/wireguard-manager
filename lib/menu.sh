@@ -362,6 +362,7 @@ menu_system() {
         echo "  1) Check / install packages"
         echo "  2) Check module integrity"
         echo "  3) Update wg-manager"
+        echo "  4) IPv6 Networks"
         echo
         echo "  0) Back to main menu"
         echo
@@ -370,9 +371,10 @@ menu_system() {
         echo
 
         case "$choice" in
-            1) system_check_packages ;;
-            2) system_check_modules ;;
-            3) system_update ;;
+            1) system_check_packages  ;;
+            2) system_check_modules   ;;
+            3) system_update          ;;
+            4) system_ipv6_networks   ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
         esac

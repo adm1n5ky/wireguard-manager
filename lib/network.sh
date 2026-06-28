@@ -188,3 +188,81 @@ for line in result.stdout.splitlines():
         print(key)
 "
 }
+# =============================================================================
+# IPv6 available pool management — /etc/wireguard/ipv6-available.conf
+# Format (one entry per line, lines starting with # are comments):
+#   <cidr>  <type>  <comment>
+#   type: nat66 | routed
+# =============================================================================
+
+# Read all non-comment lines from ipv6-available.conf
+ipv6_read_available() {
+    [[ -f "$IPV6_AVAILABLE_CONF" ]] || return 0
+    grep -v '^\s*#' "$IPV6_AVAILABLE_CONF" | grep -v '^\s*$'
+}
+
+# Count usable entries
+ipv6_available_count() {
+    ipv6_read_available | wc -l
+}
+
+# Add entry to ipv6-available.conf
+ipv6_available_add() {
+    local cidr="$1"
+    local type="$2"
+    local comment="$3"
+    mkdir -p "$(dirname "$IPV6_AVAILABLE_CONF")"
+    printf "%-35s %-8s %s\n" "$cidr" "$type" "$comment" >> "$IPV6_AVAILABLE_CONF"
+    chmod 600 "$IPV6_AVAILABLE_CONF"
+}
+
+# Remove entry by CIDR
+ipv6_available_remove() {
+    local cidr="$1"
+    [[ -f "$IPV6_AVAILABLE_CONF" ]] || return 0
+    local tmp
+    tmp="$(mktemp)"
+    grep -v "^${cidr}[[:space:]]" "$IPV6_AVAILABLE_CONF" > "$tmp" 2>/dev/null || true
+    mv "$tmp" "$IPV6_AVAILABLE_CONF"
+    chmod 600 "$IPV6_AVAILABLE_CONF"
+}
+
+# Get all /64 already in use across all instances (from .env WG_NETWORK6)
+ipv6_used_64s() {
+    for env_file in "${WG_CONFIG_DIR}"/*.env; do
+        [[ -f "$env_file" ]] || continue
+        local net6
+        net6="$(env_get "$env_file" WG_NETWORK6 2>/dev/null)"
+        [[ -z "$net6" ]] && continue
+        IFS=',' read -ra nets <<< "$net6"
+        for n in "${nets[@]}"; do
+            echo "${n// /}"
+        done
+    done
+}
+
+# Carve next free /64 from a larger block (e.g. /48)
+# Skips /64s already used by existing instances
+ipv6_carve_next_64() {
+    local parent_cidr="$1"
+    python3 -c "
+import sys, ipaddress
+
+parent = ipaddress.ip_network(sys.argv[1], strict=False)
+used   = set(sys.argv[2].split(',')) if len(sys.argv) > 2 and sys.argv[2] else set()
+
+if parent.prefixlen == 64:
+    key = str(parent)
+    if key not in used:
+        print(str(parent))
+    sys.exit(0)
+
+for subnet in parent.subnets(new_prefix=64):
+    key = str(subnet)
+    if key not in used:
+        print(key)
+        sys.exit(0)
+
+print('')
+" "$parent_cidr" "$(ipv6_used_64s | paste -sd',')"
+}

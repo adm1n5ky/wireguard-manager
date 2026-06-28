@@ -57,78 +57,97 @@ server_create() {
     echo -e "${CYAN}── Step 4b: IPv6 Networks (optional) ──${NC}"
     echo
 
-    local detected_v6=()
-    mapfile -t detected_v6 < <(detect_ipv6_prefixes)
-
     local wg_network6=""
+    local ipv6_mode=""
 
-    if [[ ${#detected_v6[@]} -gt 0 ]]; then
-        info "Detected routable IPv6 prefixes on this host:"
-        local di
-        for di in "${!detected_v6[@]}"; do
-            printf "  %d) %s
-" $(( di + 1 )) "${detected_v6[$di]}"
-        done
+    local _avail_count
+    _avail_count="$(ipv6_available_count)"
+
+    if (( _avail_count == 0 )); then
+        echo -e "  ${YELLOW}No IPv6 networks configured.${NC}"
+        echo -e "  Go to ${BOLD}System → IPv6 Networks${NC} to add your routable blocks."
         echo
-        echo "  Enter numbers to include (space-separated), or press Enter to skip."
-        echo "  A /64 will be auto-carved from larger prefixes using instance name."
+        read -rep "  Continue without IPv6? [Y/n]: " _skip_v6
+        _skip_v6="${_skip_v6:-Y}"
+        if [[ "${_skip_v6,,}" != "y" ]]; then
+            info "Cancelled. Configure IPv6 networks in System menu first."
+            pause
+            return 0
+        fi
+    else
+        # ── Show available blocks ─────────────────────────────────────────────
+        echo "  Available IPv6 blocks:"
         echo
-        read -rep "  Select [e.g. 1 2] or Enter to skip: " v6_sel
+        local -a _avail_cidrs _avail_types
+        local _aidx=0
+        while IFS= read -r _line; do
+            _aidx=$(( _aidx + 1 ))
+            local _acidr _atype _acomment
+            _acidr="$(echo "$_line"    | awk '{print $1}')"
+            _atype="$(echo "$_line"    | awk '{print $2}')"
+            _acomment="$(echo "$_line" | awk '{$1=$2=""; print substr($0,3)}')"
+            _avail_cidrs+=("$_acidr")
+            _avail_types+=("$_atype")
+
+            # Preview next free /64 for larger blocks
+            local _preview=""
+            local _apfx="${_acidr#*/}"
+            if (( _apfx < 64 )); then
+                local _next64
+                _next64="$(ipv6_carve_next_64 "$_acidr")"
+                [[ -n "$_next64" ]] && _preview=" → next /64: ${_next64}"
+            fi
+            printf "  %d) %-38s [%-6s] %s%s\n" \
+                "$_aidx" "$_acidr" "$_atype" "$_acomment" "$_preview"
+        done < <(ipv6_read_available)
+
+        echo
+        echo "  Enter numbers to include (space-separated), or Enter to skip."
+        echo
+        read -rep "  Select [e.g. 1 2] or Enter to skip: " _v6_sel
         echo
 
-        if [[ -n "$v6_sel" ]]; then
-            local v6_cidrs=()
-            for sel in $v6_sel; do
-                if [[ "$sel" =~ ^[0-9]+$ ]] &&                    (( sel >= 1 && sel <= ${#detected_v6[@]} )); then
-                    local raw="${detected_v6[$(( sel - 1 ))]}"
-                    local prefix="${raw#*/}"
-                    local carved
-                    if (( prefix < 64 )); then
-                        # Carve /64 from larger prefix using iface as subnet index
-                        carved="$(python3 -c "
-import ipaddress, sys
-net = ipaddress.ip_network(sys.argv[1], strict=False)
-# Use subnets() to get /64 slices; pick one based on iface hash
-subnets = list(net.subnets(new_prefix=64))
-idx = hash(sys.argv[2]) % len(subnets)
-print(str(subnets[abs(idx)]))
-" "$raw" "$iface" 2>/dev/null)"
-                        if [[ -n "$carved" ]]; then
-                            info "Carved from ${raw}: ${BOLD}${carved}${NC}"
-                            v6_cidrs+=("$carved")
+        if [[ -n "$_v6_sel" ]]; then
+            local _v6_cidrs=()
+            local _v6_mode_final=""
+
+            for _sel in $_v6_sel; do
+                if [[ "$_sel" =~ ^[0-9]+$ ]] && \
+                   (( _sel >= 1 && _sel <= ${#_avail_cidrs[@]} )); then
+                    local _raw="${_avail_cidrs[$(( _sel - 1 ))]}"
+                    local _rawtype="${_avail_types[$(( _sel - 1 ))]}"
+                    local _apfx="${_raw#*/}"
+                    local _carved
+
+                    if (( _apfx < 64 )); then
+                        _carved="$(ipv6_carve_next_64 "$_raw")"
+                        if [[ -z "$_carved" ]]; then
+                            warn "No free /64 available in ${_raw} — skipping."
+                            continue
                         fi
+                        info "Carved from ${_raw}: ${BOLD}${_carved}${NC}"
                     else
-                        v6_cidrs+=("$raw")
+                        _carved="$_raw"
+                    fi
+
+                    _v6_cidrs+=("$_carved")
+
+                    # Mode: use type from config; if mixed prefer nat66
+                    if [[ -z "$_v6_mode_final" ]]; then
+                        _v6_mode_final="$_rawtype"
+                    elif [[ "$_v6_mode_final" != "$_rawtype" ]]; then
+                        _v6_mode_final="nat66"
                     fi
                 fi
             done
-            if [[ ${#v6_cidrs[@]} -gt 0 ]]; then
-                wg_network6="$(IFS=','; echo "${v6_cidrs[*]}")"
+
+            if [[ ${#_v6_cidrs[@]} -gt 0 ]]; then
+                wg_network6="$(IFS=','; echo "${_v6_cidrs[*]}")"
+                ipv6_mode="${_v6_mode_final:-nat66}"
                 info "IPv6 networks: ${BOLD}${wg_network6}${NC}"
+                info "IPv6 mode:     ${BOLD}${ipv6_mode}${NC}"
             fi
         fi
-    else
-        info "No routable IPv6 prefixes detected."
-        read -rep "  Enter IPv6 CIDR(s) manually (comma-separated) or Enter to skip: " wg_network6
-        wg_network6="${wg_network6// /}"
-    fi
-
-    # ── Step 4c: NAT66 or routing (only if IPv6 configured) ───────────────────
-    local ipv6_mode=""
-    if [[ -n "$wg_network6" ]]; then
-        echo
-        echo -e "${CYAN}── Step 4c: IPv6 Forwarding Mode ──${NC}"
-        echo "  1) NAT66     — masquerade behind server IP (simpler, recommended for HE tunnel)"
-        echo "  2) Routing   — pure forwarding, clients get real IPv6 (requires upstream routing)"
-        echo
-        local v6_mode_choice
-        read -rep "  Mode [1]: " v6_mode_choice
-        v6_mode_choice="${v6_mode_choice:-1}"
-        case "$v6_mode_choice" in
-            2) ipv6_mode="routing" ;;
-            *) ipv6_mode="nat66"   ;;
-        esac
-        info "IPv6 mode: ${BOLD}${ipv6_mode}${NC}"
     fi
 
     # ── Step 5: Listen port ───────────────────────────────────────────────────
