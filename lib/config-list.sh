@@ -120,6 +120,8 @@ _table_rows() {
     for conf_file in "${WG_CONFIG_DIR}"/*.conf; do
         [[ -f "$conf_file" ]] || continue
         local name; name="$(basename "$conf_file" .conf)"
+        [[ "$name" == "ipv6-available" ]] && continue
+        grep -q "^\[Interface\]" "$conf_file" 2>/dev/null || continue
         [[ -n "${seen[$name]+_}" ]] && continue
         found=1
 
