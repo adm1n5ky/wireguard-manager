@@ -8,7 +8,9 @@ _generate_qr_svg() {
     local c_conf_file="$1"
     local svg_file="${c_conf_file%.conf}.svg"
     if command -v qrencode &>/dev/null; then
-        qrencode -l L -t SVG -o "$svg_file" < "$c_conf_file" 2>/dev/null &&             chmod 600 "$svg_file" &&             echo "$svg_file"
+        qrencode -l L -t SVG -o "$svg_file" < "$c_conf_file" 2>/dev/null \
+            && chmod 600 "$svg_file" \
+            && echo "$svg_file"
     fi
 }
 
