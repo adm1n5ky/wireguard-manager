@@ -239,8 +239,8 @@ system_ipv6_networks() {
                     nat66)  type_col="${YELLOW}nat66${NC}"  ;;
                     *)      type_col="$type"               ;;
                 esac
-                printf "  %-4s %-38s %b%-8s%b %s\n" \
-                    "$idx" "$cidr" "$type_col" "$type" "$NC" "$comment"
+                printf "  %-4s %-38s %b%b %s\n" \
+                    "$idx" "$cidr" "$type_col" "$NC" "$comment"
             done < <(ipv6_read_available)
         fi
 
