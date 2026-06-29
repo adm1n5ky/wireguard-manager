@@ -37,9 +37,9 @@ _allocate_client_ipv6() {
         if [[ -n "$ip6" ]]; then
             local prefix="${_net#*/}"
             addrs+=("${ip6}/${prefix}")
-            ok "IPv6 allocated: ${ip6}/${prefix} (from ${_net})"
+            ok "IPv6 allocated: ${ip6}/${prefix} (from ${_net})" >&2
         else
-            warn "Could not allocate IPv6 from ${_net}"
+            warn "Could not allocate IPv6 from ${_net}" >&2
         fi
     done
 
