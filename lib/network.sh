@@ -258,7 +258,8 @@ except:
 }
 
 # Carve next free /64 from a larger block (e.g. /48)
-# Skips /64s already used by existing instances
+# For blocks larger than /64: starts at 4th hextet 0x1000, increments by 1.
+# Skips /64s already in use by existing instances or server interfaces.
 ipv6_carve_next_64() {
     local parent_cidr="$1"
     python3 -c "
@@ -267,17 +268,30 @@ import sys, ipaddress
 parent = ipaddress.ip_network(sys.argv[1], strict=False)
 used   = set(sys.argv[2].split(',')) if len(sys.argv) > 2 and sys.argv[2] else set()
 
+# If already a /64 — just check if free
 if parent.prefixlen == 64:
     key = str(parent)
     if key not in used:
         print(str(parent))
     sys.exit(0)
 
-for subnet in parent.subnets(new_prefix=64):
-    key = str(subnet)
-    if key not in used:
-        print(key)
-        sys.exit(0)
+# For larger blocks: start from 4th hextet = 0x1000
+# Base = network address of parent with 4th hextet set to 0x1000
+base_int = int(parent.network_address)
+# Zero out bits below /48 (keep first 48 bits), then set 4th hextet to 0x1000
+# 4th hextet occupies bits 64-79 of the 128-bit address
+# For /48 parent: bits 48-63 are the subnet field (4th hextet in full notation)
+# 0x1000 << 64 = offset from /48 base
+start_offset = 0x1000
+candidate_int = base_int | (start_offset << 64)
+
+for i in range(0x10000 - 0x1000):  # max 0x1000..0xffff
+    candidate = ipaddress.ip_address(candidate_int + (i << 64))
+    net = ipaddress.ip_network(f'{candidate}/64', strict=False)
+    if net not in [ipaddress.ip_network(u, strict=False) for u in used if u]:
+        if net.subnet_of(parent):
+            print(str(net))
+            sys.exit(0)
 
 print('')
 " "$parent_cidr" "$(ipv6_used_64s | paste -sd',')"
