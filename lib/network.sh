@@ -227,8 +227,11 @@ ipv6_available_remove() {
     chmod 600 "$IPV6_AVAILABLE_CONF"
 }
 
-# Get all /64 already in use across all instances (from .env WG_NETWORK6)
+# Get all /64 already in use:
+# - from .env WG_NETWORK6 of all instances
+# - from real inet6 addresses on server interfaces
 ipv6_used_64s() {
+    # From .env files
     for env_file in "${WG_CONFIG_DIR}"/*.env; do
         [[ -f "$env_file" ]] || continue
         local net6
@@ -238,6 +241,19 @@ ipv6_used_64s() {
         for n in "${nets[@]}"; do
             echo "${n// /}"
         done
+    done
+
+    # From real inet6 addresses on interfaces
+    ip -6 addr show 2>/dev/null |     grep -oP 'inet6\s+\K[0-9a-f:]+(?=/\d+)' |     while read -r addr; do
+        python3 -c "
+import ipaddress, sys
+try:
+    net = ipaddress.ip_network(f'{sys.argv[1]}/64', strict=False)
+    if not net.is_loopback and not net.is_link_local:
+        print(str(net))
+except:
+    pass
+" "$addr" 2>/dev/null
     done
 }
 

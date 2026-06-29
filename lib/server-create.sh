@@ -95,7 +95,7 @@ server_create() {
             if (( _apfx < 64 )); then
                 local _next64
                 _next64="$(ipv6_carve_next_64 "$_acidr")"
-                [[ -n "$_next64" ]] && _preview=" → next /64: ${_next64}"
+                [[ -n "$_next64" ]] && _preview=" (will use: ${_next64})"
             fi
             printf "  %d) %-38s [%-6s] %s%s\n" \
                 "$_aidx" "$_acidr" "$_atype" "$_acomment" "$_preview"
