@@ -66,6 +66,7 @@ server_up() {
     msg "Starting ${unit}..."
     if backend_start "$iface"; then
         ok "Interface '${iface}' is now UP."
+        nft_instance_start "$iface"
     else
         warn "Failed to start. Check: journalctl -u ${unit} -n 30"
     fi
@@ -96,6 +97,7 @@ server_down() {
     msg "Stopping ${unit}..."
     if backend_stop "$iface"; then
         ok "Interface '${iface}' is now DOWN."
+        nft_instance_stop "$iface"
     else
         warn "Failed to stop. Check: journalctl -u ${unit} -n 30"
     fi

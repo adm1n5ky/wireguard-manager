@@ -3,7 +3,7 @@
 # lib/system.sh — Package management, module integrity, update
 # =============================================================================
 
-REQUIRED_PACKAGES_WG=(wireguard-tools curl qrencode)
+REQUIRED_PACKAGES_WG=(wireguard-tools curl qrencode nftables)
 OPTIONAL_PACKAGES=()
 
 # Modules expected to be present in LIB_DIR
@@ -14,6 +14,7 @@ EXPECTED_MODULES=(
     network.sh
     ports.sh
     endpoint.sh
+    nftables.sh
     config-list.sh
     server-create.sh
     server-delete.sh

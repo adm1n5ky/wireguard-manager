@@ -42,7 +42,7 @@ _pkg_installed() {
 
 # --- Bootstrap dependency check ----------------------------------------------
 
-BOOTSTRAP_REQUIRED=(curl qrencode)
+BOOTSTRAP_REQUIRED=(curl qrencode nftables)
 
 check_dependencies() {
     local missing=()
