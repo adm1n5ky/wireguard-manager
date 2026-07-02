@@ -90,6 +90,8 @@ server_delete() {
         ok "Service disabled."
     fi
 
+    nft_instance_delete "$iface"
+
     if [[ -f "$conf_file" ]]; then
         rm -f "$conf_file"
         ok "Removed: ${conf_file}"

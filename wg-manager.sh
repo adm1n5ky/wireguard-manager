@@ -12,7 +12,7 @@ LIB_DIR="${SCRIPT_DIR}/lib"
 #               config-list server-create server-delete client-create client-delete \
 #               client-show status peer-monitor system menu; do
 for module in common backend table validation network ports endpoint ip-pool \
-+              nftables \
+               nftables \
                config-list server-create server-delete client-create client-delete \
                client-show status peer-monitor system menu; do
     lib_file="${LIB_DIR}/${module}.sh"
