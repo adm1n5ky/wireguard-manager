@@ -1,32 +1,46 @@
 #!/usr/bin/env bash
 # =============================================================================
 # lib/nftables.sh — Per-instance nftables rules (forward + NAT + MSS + offload)
+#                    + foreign default-drop input chain detection/live-fix
 #
 # DESIGN PRINCIPLES (see chat HANDOVER for full discussion):
 #
 #   - One nft table per instance: "wg_manager_<iface>". Never touches any
 #     other table, never flushes the ruleset, never adds rules outside its
-#     own table.
-#   - SAFETY GUARANTEE: this table NEVER uses a `drop` verdict and NEVER
-#     sets `policy drop`, anywhere, on any chain. In nftables, `drop` is the
-#     only verdict that is final across the whole hook — `accept` (rule or
-#     policy) is NOT final, evaluation continues to the next base chain on
-#     the same hook regardless of priority (confirmed: wiki.nftables.org,
-#     "Configuring chains"). Because this module only ever emits `accept`,
-#     it is structurally incapable of blocking SSH or anything else — this
-#     holds regardless of priority number, so standard named priorities
-#     (filter=0, srcnat=100) are used for readability, not -5 as originally
-#     (wrongly) proposed.
-#   - Corollary: this table also cannot "protect" instance traffic from a
-#     drop policy defined elsewhere. If the admin later adds a default-drop
-#     perimeter firewall, they must explicitly allow each instance's UDP
-#     port there too — normal firewall administration, out of scope here.
-#   - Fragment files live in /etc/wireguard/nftables.d/<iface>.conf and are
-#     included from /etc/nftables.conf via one `include` line, appended
-#     once. The main conf is never rewritten, only appended to if the
-#     include line is missing — any pre-existing manual rules are untouched.
-#   - Every apply is `nft -c -f` (checked) before `nft -f` (live). A failed
-#     check never touches the live ruleset — nft transactions are atomic.
+#     own table — EXCEPT for the one narrow, explicit, confirmed exception
+#     described below (foreign default-drop input allow).
+#   - SAFETY GUARANTEE: our own wg_manager_<iface> table NEVER uses a `drop`
+#     verdict and NEVER sets `policy drop`, anywhere, on any chain. In
+#     nftables, `drop` is the only verdict that is final across the whole
+#     hook — `accept` (rule or policy) is NOT final, evaluation continues
+#     to the next base chain on the same hook regardless of priority
+#     (confirmed: wiki.nftables.org, "Configuring chains"). Because this
+#     module only ever emits `accept` in its own table, that table is
+#     structurally incapable of blocking SSH or anything else — this holds
+#     regardless of priority number, so standard named priorities
+#     (filter=0, srcnat=100) are used for readability.
+#   - REAL-WORLD COROLLARY (found in production, msk-01, wg101): our
+#     `accept` cannot rescue traffic from a DIFFERENT table's `policy drop`
+#     on the same hook either — that other chain is evaluated independently
+#     and its drop is final regardless of what our table decided. This is
+#     the normal case on any server with a pre-existing hand-written
+#     default-drop input firewall (the standard, common setup — not an
+#     edge case). When detected, wg-manager:
+#       1. never edits that foreign table/file automatically,
+#       2. offers a single, explicit, confirmed `nft add rule` LIVE fix
+#          (idempotent — checked via a comment tag before adding),
+#       3. always states clearly that the live fix does not survive a
+#         `nft -f` reload or reboot,
+#       4. provides a persistent version (System → Nftables Rules) that
+#          the admin pastes into their own file by hand — wg-manager never
+#          writes to a file it did not create itself.
+#   - Fragment files (our own table) live in /etc/wireguard/nftables.d/
+#     <iface>.conf and are included from /etc/nftables.conf via one
+#     `include` line, appended once. The main conf is never rewritten,
+#     only appended to if the include line is missing.
+#   - Every apply of our own table is `nft -c -f` (checked) before `nft -f`
+#     (live). A failed check never touches the live ruleset — nft
+#     transactions are atomic.
 #   - Fragments are only generated/applied once the instance interface is
 #     actually up (called from backend_start success paths) — the
 #     flowtable's `devices = { ext_if, iface }` requires both interfaces to
@@ -34,7 +48,7 @@
 #   - Stopped instance: live table deleted via `nft delete table inet
 #     wg_manager_<iface>` (renaming the file alone does not affect the live
 #     ruleset), fragment renamed to <iface>.conf.stop (excluded by the
-#     include glob) so it is not picked up on the next full nft reload.
+#     include glob).
 #   - Deleted instance: live table deleted, fragment removed entirely.
 # =============================================================================
 
@@ -96,6 +110,23 @@ nft_ensure_bootstrap() {
     fi
 
     return 0
+}
+
+# --- Persistent config file (source of truth for reload/reboot) ------------
+# Resolved from nftables.service's actual ExecStart, not assumed, since the
+# unit can be overridden. Falls back to the NFT_MAIN_CONF constant if
+# detection fails for any reason.
+
+nft_main_conf_from_service() {
+    local execstart
+    execstart="$(systemctl show -p ExecStart --value nftables.service 2>/dev/null)"
+    [[ -z "$execstart" ]] && return 1
+
+    local found
+    found="$(echo "$execstart" | grep -oP '(?<=-f )\S+' | head -1)"
+    [[ -z "$found" ]] && return 1
+
+    echo "$found"
 }
 
 # --- External interface detection -----------------------------------------
@@ -217,7 +248,10 @@ nft_write_fragment() {
         echo "# Safety invariant: this table never uses 'drop' or 'policy drop'."
         echo "# 'accept' is not terminal across chains in nftables — only 'drop' is."
         echo "# This table therefore cannot block SSH or anything outside its own"
-        echo "# forward/postrouting/input rules for this one instance."
+        echo "# forward/postrouting/input rules for this one instance. It also"
+        echo "# cannot override a DIFFERENT table's 'policy drop' on the same hook"
+        echo "# (see System -> Nftables Rules if this instance has connectivity"
+        echo "# issues on a server with a pre-existing default-drop firewall)."
         echo "table inet ${table_name} {"
         echo ""
         echo "    flowtable ${flowtable_name} {"
@@ -293,6 +327,108 @@ nft_write_fragment() {
     echo "$frag_file"
 }
 
+# =============================================================================
+# Foreign default-drop input chain detection + live-fix
+# =============================================================================
+
+# Print "<family>\t<table>\t<chain>" for every base chain on hook=input with
+# policy=drop, excluding wg-manager's own wg_manager_* tables. Uses `nft -j`
+# (JSON) parsed via python3 — more robust than scraping human-readable output.
+nft_foreign_drop_chains() {
+    nft -j list ruleset 2>/dev/null | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for obj in data.get('nftables', []):
+    c = obj.get('chain')
+    if not c:
+        continue
+    if c.get('hook') != 'input':
+        continue
+    if c.get('policy') != 'drop':
+        continue
+    table = c.get('table', '')
+    if table.startswith('wg_manager_'):
+        continue
+    print(f\"{c.get('family','')}\t{table}\t{c.get('name','')}\")
+"
+}
+
+# Check whether a rule with the given comment already exists in a chain.
+# Returns 0 (found) / 1 (not found).
+_nft_foreign_rule_exists() {
+    local family="$1" table="$2" chain="$3" comment="$4"
+    nft -j list chain "$family" "$table" "$chain" 2>/dev/null | python3 -c "
+import json, sys
+target = sys.argv[1]
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+for obj in data.get('nftables', []):
+    r = obj.get('rule')
+    if not r:
+        continue
+    if r.get('comment') == target:
+        sys.exit(0)
+sys.exit(1)
+" "$comment"
+}
+
+# Called after our own table is applied successfully. Detects any foreign
+# default-drop input chain, and — only with explicit per-chain confirmation —
+# adds a single idempotent live 'accept' rule for this instance's UDP port.
+# Never edits any file. Never adds more than one rule per (chain, instance)
+# pair, checked via a comment tag.
+nft_offer_foreign_allow() {
+    local iface="$1"
+    local env_file port
+    env_file="$(env_path "$iface")"
+    port="$(env_get "$env_file" WG_PORT)"
+    [[ -z "$port" ]] && return 0
+
+    local foreign
+    foreign="$(nft_foreign_drop_chains)"
+    [[ -z "$foreign" ]] && return 0
+
+    local comment="wg-manager: ${iface}"
+
+    while IFS=$'\t' read -r family table chain; do
+        [[ -z "$table" ]] && continue
+
+        if _nft_foreign_rule_exists "$family" "$table" "$chain" "$comment"; then
+            continue
+        fi
+
+        echo
+        warn "Found a default-drop input firewall: ${family} table '${table}', chain '${chain}'."
+        warn "Instance '${iface}' UDP port ${port} is NOT in its allow-list."
+        warn "Clients will see repeated handshake retries and never connect."
+        echo
+        read -rep "Add a LIVE 'accept' rule for UDP ${port} to ${table}/${chain} now? [Y/n]: " _fw_ans
+        _fw_ans="${_fw_ans:-Y}"
+
+        if [[ "${_fw_ans,,}" == "y" ]]; then
+            local apply_err
+            apply_err="$(mktemp)"
+            if nft add rule "$family" "$table" "$chain" \
+                   udp dport "$port" accept comment "\"${comment}\"" 2>"$apply_err"; then
+                ok "Live rule added: udp dport ${port} accept (${table}/${chain})."
+                warn "LIVE ONLY — this will NOT survive 'nft -f' or a reboot."
+                warn "To persist it: System -> Nftables Rules"
+            else
+                warn "Failed to add live rule:"
+                sed 's/^/    /' "$apply_err" >&2
+            fi
+            rm -f "$apply_err"
+        else
+            warn "Skipped. '${iface}' clients will not connect until UDP ${port} is allowed in ${table}/${chain}."
+        fi
+    done <<< "$foreign"
+}
+
 # --- Lifecycle hooks ---------------------------------------------------------
 
 # Call after backend_start succeeded (interface is confirmed up).
@@ -311,6 +447,7 @@ nft_instance_start() {
     if nft -f "$frag_file" 2>"$apply_err"; then
         ok "nftables rules applied (table: $(_nft_table_name "$iface"))."
         rm -f "$apply_err"
+        nft_offer_foreign_allow "$iface"
         return 0
     else
         warn "Failed to apply nftables rules for ${iface}:"

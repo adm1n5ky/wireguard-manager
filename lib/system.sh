@@ -387,3 +387,93 @@ _ipv6_remove_network() {
     ok "Removed: ${target}"
     pause
 }
+# =============================================================================
+# Nftables Rules — show persistent-config location + generated allow block
+#
+# wg-manager never edits a foreign nftables config file automatically (see
+# lib/nftables.sh header for the full rationale). This screen is the "System"
+# side of that decision: it tells the admin exactly where their real config
+# lives and gives them a ready-to-paste block, generated from the instances
+# that are actually running right now, so they never have to write it by
+# hand from scratch.
+# =============================================================================
+
+system_nftables_rules() {
+    echo
+    echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║   Nftables Rules                     ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
+    echo
+
+    if ! nft_available; then
+        warn "nft (nftables) is not installed."
+        pause
+        return 0
+    fi
+
+    local main_conf
+    main_conf="$(nft_main_conf_from_service)"
+    main_conf="${main_conf:-$NFT_MAIN_CONF}"
+
+    info "Persistent nftables config (resolved from nftables.service ExecStart):"
+    echo "    ${main_conf}"
+    echo
+
+    local foreign
+    foreign="$(nft_foreign_drop_chains)"
+
+    if [[ -z "$foreign" ]]; then
+        ok "No foreign default-drop input chain detected."
+        echo "  wg-manager's own per-instance tables (wg_manager_<iface>) are"
+        echo "  additive, self-contained, and persisted automatically via:"
+        echo "    ${NFT_FRAG_DIR}/*.conf  (included from ${main_conf})"
+        echo "  There is nothing that needs manual persistence right now."
+        pause
+        return 0
+    fi
+
+    echo -e "  ${YELLOW}Default-drop input firewall(s) detected outside wg-manager:${NC}"
+    echo
+    while IFS=$'\t' read -r family table chain; do
+        [[ -z "$table" ]] && continue
+        echo "    ${family} table '${table}', chain '${chain}' — policy drop"
+    done <<< "$foreign"
+    echo
+    echo "  wg-manager never edits this file automatically — it is yours to"
+    echo "  maintain. Paste the lines below manually inside that chain's"
+    echo "  '{ ... }' body in ${main_conf} (or wherever that chain is actually"
+    echo "  defined, if it's split across includes)."
+    echo
+    echo "  One line per managed instance that is currently UP:"
+    echo
+    echo "  ────────────────────────────────────────────────────────────"
+
+    local instances
+    mapfile -t instances < <(list_wg_instances)
+
+    local any_up=0
+    local name
+    for name in "${instances[@]}"; do
+        [[ "$(_iface_state "$name")" == "UP" ]] || continue
+        local port
+        port="$(env_get "$(env_path "$name")" WG_PORT)"
+        [[ -z "$port" ]] && continue
+        any_up=1
+        echo "        udp dport ${port} accept comment \"wg-manager: ${name}\""
+    done
+
+    if (( any_up == 0 )); then
+        echo "        (no managed instances are currently UP)"
+    fi
+
+    echo "  ────────────────────────────────────────────────────────────"
+    echo
+    info "After editing manually, apply with:"
+    echo "    nft -c -f ${main_conf}   # check first — will not touch the live ruleset"
+    echo "    systemctl reload-or-restart nftables"
+    echo
+    info "Rules added live via the 'Start interface' confirmation prompt do"
+    info "NOT survive the reload above unless pasted into the file first."
+
+    pause
+}

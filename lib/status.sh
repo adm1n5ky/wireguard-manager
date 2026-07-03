@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# =============================================================================
-# lib/status.sh — Interface up/down management
-# =============================================================================
-
-# --- Pick an instance interactively ------------------------------------------
 
 _pick_instance() {
     local prompt="${1:-Select instance}"
@@ -41,8 +36,6 @@ _pick_instance() {
     done
 }
 
-# --- Bring interface UP -------------------------------------------------------
-
 server_up() {
     echo
     echo -e "${CYAN}── Start Interface ──${NC}"
@@ -74,8 +67,6 @@ server_up() {
     pause
 }
 
-# --- Bring interface DOWN -----------------------------------------------------
-
 server_down() {
     echo
     echo -e "${CYAN}── Stop Interface ──${NC}"
@@ -104,7 +95,6 @@ server_down() {
 
     pause
 }
-# --- Show interface status ---------------------------------------------------
 
 server_status() {
     echo

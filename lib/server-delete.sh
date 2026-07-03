@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# =============================================================================
-# lib/server-delete.sh — Safe WireGuard / AmneziaWG server removal
-# =============================================================================
 
 server_delete() {
     echo

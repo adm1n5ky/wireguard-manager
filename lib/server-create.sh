@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# =============================================================================
-# lib/server-create.sh — Interactive WireGuard / AmneziaWG server creation
-# =============================================================================
-
 DEFAULT_MTU=1420
 
 server_create() {
@@ -12,7 +8,6 @@ server_create() {
     echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
     echo
 
-    # ── Step 1: Backend ───────────────────────────────────────────────────────
     echo -e "${CYAN}── Step 1: Backend ──${NC}"
     local backend
     prompt_backend backend || return 1
@@ -23,13 +18,11 @@ server_create() {
         return 1
     fi
 
-    # ── Step 2: Interface name ────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 2: Interface Name ──${NC}"
     local iface
     prompt_iface_name iface || return 1
 
-    # ── Step 3: Network CIDR ──────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 3: Network (CIDR) ──${NC}"
     local cidr
@@ -47,12 +40,10 @@ server_create() {
         fi
     done
 
-    # ── Step 4: Server IP (auto) ──────────────────────────────────────────────
     local server_ip
     server_ip="$(network_to_server_ip "$cidr")"
     info "Server address will be: ${BOLD}${server_ip}${NC}"
 
-    # ── Step 4b: IPv6 networks (optional) ─────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 4b: IPv6 Networks (optional) ──${NC}"
     echo
@@ -75,7 +66,6 @@ server_create() {
             return 0
         fi
     else
-        # ── Show available blocks ─────────────────────────────────────────────
         echo "  Available IPv6 blocks:"
         echo
         local -a _avail_cidrs _avail_types
@@ -89,7 +79,6 @@ server_create() {
             _avail_cidrs+=("$_acidr")
             _avail_types+=("$_atype")
 
-            # Preview next free /64 for larger blocks
             local _preview=""
             local _apfx="${_acidr#*/}"
             if (( _apfx < 64 )); then
@@ -132,7 +121,6 @@ server_create() {
 
                     _v6_cidrs+=("$_carved")
 
-                    # Mode: use type from config; if mixed prefer nat66
                     if [[ -z "$_v6_mode_final" ]]; then
                         _v6_mode_final="$_rawtype"
                     elif [[ "$_v6_mode_final" != "$_rawtype" ]]; then
@@ -162,13 +150,11 @@ server_create() {
         warn "Install nftables and re-create the instance, or add forwarding rules manually."
     fi
 
-    # ── Step 5: Listen port ───────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 4: Listen Port ──${NC}"
     local port
     prompt_port port || return 1
 
-    # ── Step 6: MTU ───────────────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 5: MTU ──${NC}"
     local mtu err
@@ -184,7 +170,6 @@ server_create() {
         warn "$err"
     done
 
-    # ── Step 7: Key directory ─────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 6: Key Directory ──${NC}"
     local default_keydir
@@ -195,13 +180,11 @@ server_create() {
     keydir="${keydir:-$default_keydir}"
     keydir="${keydir%/}"
 
-    # ── Step 8: Endpoint ──────────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 7: Endpoint ──${NC}"
     local endpoint
     prompt_endpoint endpoint || return 1
 
-    # ── Step 9: PSK mode ──────────────────────────────────────────────────────
     echo
     echo -e "${CYAN}── Step 8: Pre-shared Keys ──${NC}"
     local use_psk
@@ -213,7 +196,6 @@ server_create() {
         use_psk="no"
     fi
 
-    # ── Summary ───────────────────────────────────────────────────────────────
     echo
     echo -e "${BOLD}══════════════════════════════════════${NC}"
     echo -e "${BOLD}  Summary${NC}"
@@ -240,7 +222,6 @@ server_create() {
         return 0
     fi
 
-    # ── Generate keys ─────────────────────────────────────────────────────────
     msg "Creating key directory: ${keydir}"
     mkdir -p "$keydir"
     chmod 700 "$keydir"
@@ -260,11 +241,9 @@ server_create() {
     chmod 644 "$pub_file"
     ok "Keys generated."
 
-    # ── Write .conf ───────────────────────────────────────────────────────────
     local conf_file
     conf_file="$(conf_path "$iface")"
 
-    # Build IPv6 server addresses for [Interface] Address field
     local v6_server_addresses=""
     if [[ -n "$wg_network6" ]]; then
         IFS=',' read -ra _v6nets <<< "$wg_network6"
@@ -295,7 +274,6 @@ EOF
     chmod 600 "$conf_file"
     ok "Config written."
 
-    # ── Write .env ────────────────────────────────────────────────────────────
     local env_file
     env_file="$(env_path "$iface")"
     local created_at
@@ -325,14 +303,12 @@ EOF
     chmod 600 "$env_file"
     ok "Metadata written."
 
-    # ── Enable systemd service ────────────────────────────────────────────────
     local unit
     unit="$(_systemd_unit "$backend" "$iface")"
     msg "Enabling systemd service: ${unit}"
     backend_enable "$iface"
     ok "Service enabled (will start on next boot)."
 
-    # ── Offer to start the interface ──────────────────────────────────────────
     echo
     read -rep "Start interface now? [Y/n]: " start_now
     start_now="${start_now:-Y}"
