@@ -432,42 +432,69 @@ system_nftables_rules() {
         return 0
     fi
 
-    echo -e "  ${YELLOW}Default-drop input firewall(s) detected outside wg-manager:${NC}"
+    echo -e "  ${YELLOW}Default-drop firewall chain(s) detected outside wg-manager:${NC}"
     echo
-    while IFS=$'\t' read -r family table chain; do
+    while IFS=$'\t' read -r family table chain hook; do
         [[ -z "$table" ]] && continue
-        echo "    ${family} table '${table}', chain '${chain}' — policy drop"
+        echo "    ${family} table '${table}', chain '${chain}' (${hook}) — policy drop"
     done <<< "$foreign"
     echo
     echo "  wg-manager never edits this file automatically — it is yours to"
-    echo "  maintain. Paste the lines below manually inside that chain's"
-    echo "  '{ ... }' body in ${main_conf} (or wherever that chain is actually"
-    echo "  defined, if it's split across includes)."
+    echo "  maintain. Paste the lines below manually inside the matching chain's"
+    echo "  '{ ... }' body in ${main_conf} (or wherever it is actually defined,"
+    echo "  if split across includes). One line per managed instance that is"
+    echo "  currently UP, grouped by which hook needs it:"
     echo
-    echo "  One line per managed instance that is currently UP:"
-    echo
-    echo "  ────────────────────────────────────────────────────────────"
 
     local instances
     mapfile -t instances < <(list_wg_instances)
 
-    local any_up=0
-    local name
-    for name in "${instances[@]}"; do
-        [[ "$(_iface_state "$name")" == "UP" ]] || continue
-        local port
-        port="$(env_get "$(env_path "$name")" WG_PORT)"
-        [[ -z "$port" ]] && continue
-        any_up=1
-        echo "        udp dport ${port} accept comment \"wg-manager: ${name}\""
-    done
+    local has_input=0 has_forward=0
+    while IFS=$'\t' read -r _f _t _c hook; do
+        [[ "$hook" == "input"   ]] && has_input=1
+        [[ "$hook" == "forward" ]] && has_forward=1
+    done <<< "$foreign"
 
-    if (( any_up == 0 )); then
-        echo "        (no managed instances are currently UP)"
+    local name any_up
+
+    if (( has_input )); then
+        echo "  For the 'input' chain (opens the UDP port itself):"
+        echo "  ────────────────────────────────────────────────────────────"
+        any_up=0
+        for name in "${instances[@]}"; do
+            [[ "$(_iface_state "$name")" == "UP" ]] || continue
+            local port
+            port="$(env_get "$(env_path "$name")" WG_PORT)"
+            [[ -z "$port" ]] && continue
+            any_up=1
+            echo "        udp dport ${port} accept comment \"wg-manager: ${name}\""
+        done
+        (( any_up == 0 )) && echo "        (no managed instances are currently UP)"
+        echo "  ────────────────────────────────────────────────────────────"
+        echo
     fi
 
-    echo "  ────────────────────────────────────────────────────────────"
-    echo
+    if (( has_forward )); then
+        echo "  For the 'forward' chain (lets client traffic reach the internet):"
+        echo "  ────────────────────────────────────────────────────────────"
+        any_up=0
+        for name in "${instances[@]}"; do
+            [[ "$(_iface_state "$name")" == "UP" ]] || continue
+            local ext_if
+            ext_if="$(env_get "$(env_path "$name")" WG_EXT_IFACE)"
+            [[ -z "$ext_if" ]] && ext_if="$(nft_detect_ext_iface)"
+            [[ -z "$ext_if" ]] && continue
+            any_up=1
+            echo "        iifname \"${name}\" oifname \"${ext_if}\" accept comment \"wg-manager: ${name}\""
+        done
+        (( any_up == 0 )) && echo "        (no managed instances are currently UP)"
+        echo "  ────────────────────────────────────────────────────────────"
+        echo "  Assumes that chain already has a generic 'ct state"
+        echo "  established,related accept' rule for return traffic — check"
+        echo "  that it does, or add it alongside the lines above if not."
+        echo
+    fi
+
     info "After editing manually, apply with:"
     echo "    nft -c -f ${main_conf}   # check first — will not touch the live ruleset"
     echo "    systemctl reload-or-restart nftables"

@@ -345,14 +345,14 @@ for obj in data.get('nftables', []):
     c = obj.get('chain')
     if not c:
         continue
-    if c.get('hook') != 'input':
+    if c.get('hook') not in ('input', 'forward'):
         continue
     if c.get('policy') != 'drop':
         continue
     table = c.get('table', '')
     if table.startswith('wg_manager_'):
         continue
-    print(f\"{c.get('family','')}\t{table}\t{c.get('name','')}\")
+    print(f\"{c.get('family','')}\t{table}\t{c.get('name','')}\t{c.get('hook','')}\")
 "
 }
 
@@ -384,9 +384,11 @@ sys.exit(1)
 # pair, checked via a comment tag.
 nft_offer_foreign_allow() {
     local iface="$1"
-    local env_file port
+    local env_file port ext_if
     env_file="$(env_path "$iface")"
     port="$(env_get "$env_file" WG_PORT)"
+    ext_if="$(env_get "$env_file" WG_EXT_IFACE)"
+    [[ -z "$ext_if" ]] && ext_if="$(nft_detect_ext_iface)"
     [[ -z "$port" ]] && return 0
 
     local foreign
@@ -395,7 +397,7 @@ nft_offer_foreign_allow() {
 
     local comment="wg-manager: ${iface}"
 
-    while IFS=$'\t' read -r family table chain; do
+    while IFS=$'\t' read -r family table chain hook; do
         [[ -z "$table" ]] && continue
 
         if _nft_foreign_rule_exists "$family" "$table" "$chain" "$comment"; then
@@ -403,19 +405,44 @@ nft_offer_foreign_allow() {
         fi
 
         echo
-        warn "Found a default-drop input firewall: ${family} table '${table}', chain '${chain}'."
-        warn "Instance '${iface}' UDP port ${port} is NOT in its allow-list."
-        warn "Clients will see repeated handshake retries and never connect."
+        warn "Found a default-drop ${hook} firewall: ${family} table '${table}', chain '${chain}'."
+
+        local -a rule_expr
+        case "$hook" in
+            input)
+                warn "Instance '${iface}' UDP port ${port} is NOT in its allow-list."
+                warn "Clients will see repeated handshake retries and never connect."
+                rule_expr=(udp dport "$port" accept)
+                ;;
+            forward)
+                if [[ -z "$ext_if" ]]; then
+                    warn "Instance '${iface}' traffic is NOT in this forward allow-list, and no"
+                    warn "external interface could be determined — skipping automatic fix."
+                    warn "Add manually: iifname \"${iface}\" oifname <ext-if> accept"
+                    continue
+                fi
+                warn "Instance '${iface}' forwarded traffic is NOT in this chain's allow-list."
+                warn "Handshakes may succeed but clients will have NO internet access."
+                warn "NOTE: this assumes ${table}/${chain} already has a generic"
+                warn "'ct state established,related accept' rule for return traffic"
+                warn "(near-universal pattern) — if not, add that manually too."
+                rule_expr=(iifname "$iface" oifname "$ext_if" accept)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
         echo
-        read -rep "Add a LIVE 'accept' rule for UDP ${port} to ${table}/${chain} now? [Y/n]: " _fw_ans
+        read -rep "Add a LIVE 'accept' rule to ${table}/${chain} (${hook}) now? [Y/n]: " _fw_ans
         _fw_ans="${_fw_ans:-Y}"
 
         if [[ "${_fw_ans,,}" == "y" ]]; then
             local apply_err
             apply_err="$(mktemp)"
             if nft add rule "$family" "$table" "$chain" \
-                   udp dport "$port" accept comment "\"${comment}\"" 2>"$apply_err"; then
-                ok "Live rule added: udp dport ${port} accept (${table}/${chain})."
+                   "${rule_expr[@]}" comment "\"${comment}\"" 2>"$apply_err"; then
+                ok "Live rule added: ${rule_expr[*]} (${table}/${chain})."
                 warn "LIVE ONLY — this will NOT survive 'nft -f' or a reboot."
                 warn "To persist it: System -> Nftables Rules"
             else
@@ -424,7 +451,7 @@ nft_offer_foreign_allow() {
             fi
             rm -f "$apply_err"
         else
-            warn "Skipped. '${iface}' clients will not connect until UDP ${port} is allowed in ${table}/${chain}."
+            warn "Skipped. '${iface}' may not work correctly until ${table}/${chain} allows it."
         fi
     done <<< "$foreign"
 }
