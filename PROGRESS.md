@@ -302,3 +302,11 @@ ARCHITECTURE NOTES FOR FUTURE SELF:
   fresh from GitHub at start of new chat / before re-applying any
   fix, do not trust Project Knowledge sync timestamp blindly (has
   gone stale mid-session before, more than once).
+
+## 2026-07-13 | nftables automation — built, then reverted
+
+DECISION: per-instance nftables automation (forward/NAT/MSS/flowtable +
+foreign default-drop detection) was built and tested (fixed real handshake
+failure on wg101), then deliberately reverted — too much surface for the
+project's scope. Manual nft rules preferred going forward. Do not
+re-propose without explicit request.

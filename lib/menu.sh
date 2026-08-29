@@ -363,7 +363,6 @@ menu_system() {
         echo "  2) Check module integrity"
         echo "  3) Update wg-manager"
         echo "  4) IPv6 Networks"
-        echo "  5) Nftables Rules"
         echo
         echo "  0) Back to main menu"
         echo
@@ -376,7 +375,6 @@ menu_system() {
             2) system_check_modules   ;;
             3) system_update          ;;
             4) system_ipv6_networks   ;;
-            5) system_nftables_rules  ;;
             0) return 0 ;;
             *) warn "Unknown option: ${choice}"; sleep 1 ;;
         esac

@@ -3,7 +3,7 @@
 # lib/system.sh — Package management, module integrity, update
 # =============================================================================
 
-REQUIRED_PACKAGES_WG=(wireguard-tools curl qrencode nftables)
+REQUIRED_PACKAGES_WG=(wireguard-tools curl qrencode)
 OPTIONAL_PACKAGES=()
 
 # Modules expected to be present in LIB_DIR
@@ -14,7 +14,6 @@ EXPECTED_MODULES=(
     network.sh
     ports.sh
     endpoint.sh
-    nftables.sh
     config-list.sh
     server-create.sh
     server-delete.sh
@@ -385,122 +384,5 @@ _ipv6_remove_network() {
 
     ipv6_available_remove "$target"
     ok "Removed: ${target}"
-    pause
-}
-# =============================================================================
-# Nftables Rules — show persistent-config location + generated allow block
-#
-# wg-manager never edits a foreign nftables config file automatically (see
-# lib/nftables.sh header for the full rationale). This screen is the "System"
-# side of that decision: it tells the admin exactly where their real config
-# lives and gives them a ready-to-paste block, generated from the instances
-# that are actually running right now, so they never have to write it by
-# hand from scratch.
-# =============================================================================
-
-system_nftables_rules() {
-    echo
-    echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║   Nftables Rules                     ║${NC}"
-    echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
-    echo
-
-    if ! nft_available; then
-        warn "nft (nftables) is not installed."
-        pause
-        return 0
-    fi
-
-    local main_conf
-    main_conf="$(nft_main_conf_from_service)"
-    main_conf="${main_conf:-$NFT_MAIN_CONF}"
-
-    info "Persistent nftables config (resolved from nftables.service ExecStart):"
-    echo "    ${main_conf}"
-    echo
-
-    local foreign
-    foreign="$(nft_foreign_drop_chains)"
-
-    if [[ -z "$foreign" ]]; then
-        ok "No foreign default-drop input chain detected."
-        echo "  wg-manager's own per-instance tables (wg_manager_<iface>) are"
-        echo "  additive, self-contained, and persisted automatically via:"
-        echo "    ${NFT_FRAG_DIR}/*.conf  (included from ${main_conf})"
-        echo "  There is nothing that needs manual persistence right now."
-        pause
-        return 0
-    fi
-
-    echo -e "  ${YELLOW}Default-drop firewall chain(s) detected outside wg-manager:${NC}"
-    echo
-    while IFS=$'\t' read -r family table chain hook; do
-        [[ -z "$table" ]] && continue
-        echo "    ${family} table '${table}', chain '${chain}' (${hook}) — policy drop"
-    done <<< "$foreign"
-    echo
-    echo "  wg-manager never edits this file automatically — it is yours to"
-    echo "  maintain. Paste the lines below manually inside the matching chain's"
-    echo "  '{ ... }' body in ${main_conf} (or wherever it is actually defined,"
-    echo "  if split across includes). One line per managed instance that is"
-    echo "  currently UP, grouped by which hook needs it:"
-    echo
-
-    local instances
-    mapfile -t instances < <(list_wg_instances)
-
-    local has_input=0 has_forward=0
-    while IFS=$'\t' read -r _f _t _c hook; do
-        [[ "$hook" == "input"   ]] && has_input=1
-        [[ "$hook" == "forward" ]] && has_forward=1
-    done <<< "$foreign"
-
-    local name any_up
-
-    if (( has_input )); then
-        echo "  For the 'input' chain (opens the UDP port itself):"
-        echo "  ────────────────────────────────────────────────────────────"
-        any_up=0
-        for name in "${instances[@]}"; do
-            [[ "$(_iface_state "$name")" == "UP" ]] || continue
-            local port
-            port="$(env_get "$(env_path "$name")" WG_PORT)"
-            [[ -z "$port" ]] && continue
-            any_up=1
-            echo "        udp dport ${port} accept comment \"wg-manager: ${name}\""
-        done
-        (( any_up == 0 )) && echo "        (no managed instances are currently UP)"
-        echo "  ────────────────────────────────────────────────────────────"
-        echo
-    fi
-
-    if (( has_forward )); then
-        echo "  For the 'forward' chain (lets client traffic reach the internet):"
-        echo "  ────────────────────────────────────────────────────────────"
-        any_up=0
-        for name in "${instances[@]}"; do
-            [[ "$(_iface_state "$name")" == "UP" ]] || continue
-            local ext_if
-            ext_if="$(env_get "$(env_path "$name")" WG_EXT_IFACE)"
-            [[ -z "$ext_if" ]] && ext_if="$(nft_detect_ext_iface)"
-            [[ -z "$ext_if" ]] && continue
-            any_up=1
-            echo "        iifname \"${name}\" oifname \"${ext_if}\" accept comment \"wg-manager: ${name}\""
-        done
-        (( any_up == 0 )) && echo "        (no managed instances are currently UP)"
-        echo "  ────────────────────────────────────────────────────────────"
-        echo "  Assumes that chain already has a generic 'ct state"
-        echo "  established,related accept' rule for return traffic — check"
-        echo "  that it does, or add it alongside the lines above if not."
-        echo
-    fi
-
-    info "After editing manually, apply with:"
-    echo "    nft -c -f ${main_conf}   # check first — will not touch the live ruleset"
-    echo "    systemctl reload-or-restart nftables"
-    echo
-    info "Rules added live via the 'Start interface' confirmation prompt do"
-    info "NOT survive the reload above unless pasted into the file first."
-
     pause
 }

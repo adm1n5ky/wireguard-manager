@@ -138,18 +138,6 @@ server_create() {
         fi
     fi
 
-    # ── Step 4c: External Interface (NAT/forwarding) ──────────────────────────
-    echo
-    echo -e "${CYAN}── Step 4c: External Interface ──${NC}"
-    echo
-    local ext_iface=""
-    if nft_available; then
-        prompt_nft_ext_iface ext_iface || return 1
-    else
-        warn "nft (nftables) not found — firewall/NAT rules will not be managed automatically."
-        warn "Install nftables and re-create the instance, or add forwarding rules manually."
-    fi
-
     echo
     echo -e "${CYAN}── Step 4: Listen Port ──${NC}"
     local port
@@ -211,7 +199,6 @@ server_create() {
     printf "  %-28s %s\n" "PSK per client:"     "$use_psk"
     [[ -n "$wg_network6" ]] && printf "  %-28s %s\n" "IPv6 networks:" "$wg_network6"
     [[ -n "$ipv6_mode"   ]] && printf "  %-28s %s\n" "IPv6 mode:"    "$ipv6_mode"
-    [[ -n "$ext_iface"   ]] && printf "  %-28s %s\n" "External interface:" "$ext_iface"
     echo -e "${BOLD}══════════════════════════════════════${NC}"
     echo
 
@@ -296,7 +283,6 @@ WG_PUBLIC_KEY_FILE=${pub_file}
 WG_SERVER_PUBLIC_KEY=${public_key}
 WG_NETWORK6=${wg_network6}
 WG_IPV6_MODE=${ipv6_mode}
-WG_EXT_IFACE=${ext_iface}
 WG_CREATED_AT=${created_at}
 EOF
 
@@ -317,13 +303,11 @@ EOF
         msg "Starting ${unit}..."
         if backend_start "$iface"; then
             ok "Interface ${iface} is UP."
-            nft_instance_start "$iface"
         else
             warn "Failed to start. Check: journalctl -u ${unit}"
         fi
     else
         info "Start later: systemctl start ${unit}"
-        info "Firewall/NAT rules will be generated automatically on first start."
     fi
 
     echo
